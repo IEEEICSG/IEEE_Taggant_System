@@ -1,9 +1,10 @@
 IEEE_Taggant_System
 ===================
 
-Taggant System developed by the Malware Working Group of ICSG (Industry Connections Security Group) under the umbrella of IEEE
+Taggant System was developed by the Malware Working Group of ICSG (Industry Connections Security Group) under the umbrella of IEEE
 
-Taggant System
+Taggant System:
+
 The Taggant System places a cryptographically secure marker in the packed and obfuscated files created by commercial
 software distribution packaging programs (packers). Legitimate packers are often abused by malware creators to create 
 many, difficult-to-detect variants of their malware. The Taggant System markers identify the specific packer user's
