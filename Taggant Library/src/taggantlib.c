@@ -80,6 +80,8 @@
 #include <openssl/err.h>
 #include <openssl/x509_vfy.h>
 
+#define _CRT_SECURE_NO_WARNINGS
+
 #define LIBRARY_VERSION 1
 #define CERTIFICATES_IN_TAGGANT_CHAIN 2
 
@@ -581,7 +583,7 @@ EXPORT UNSIGNED32 STDCALL TaggantValidateSignature(PTAGGANTOBJ pTaggantObj, PTAG
 	BIO *signedbio = NULL;
 	BIO *tsbio = NULL;
 	STACK_OF(X509)* certs = NULL;
-	X509 *root = NULL, *spv = NULL, *user = NULL;
+	X509 *root = NULL, *cer1 = NULL, *cer2 = NULL;
 	char* buf = NULL;
 	int biolength = 0;
 	int tagsize;
@@ -627,8 +629,8 @@ EXPORT UNSIGNED32 STDCALL TaggantValidateSignature(PTAGGANTOBJ pTaggantObj, PTAG
 										/* There should be 2 certificates only: CA, SPV and USER */
 										if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
 										{
-											spv = sk_X509_value(certs, 0);
-											user = sk_X509_value(certs, 1);
+											cer1 = sk_X509_value(certs, 0);
+											cer2 = sk_X509_value(certs, 1);
 											csc = X509_STORE_CTX_new();
 											if (csc)
 											{
@@ -637,9 +639,9 @@ EXPORT UNSIGNED32 STDCALL TaggantValidateSignature(PTAGGANTOBJ pTaggantObj, PTAG
 												{
 													if (X509_STORE_add_cert(store, root))
 													{
-														if (X509_STORE_add_cert(store, spv))
+														if (X509_STORE_add_cert(store, cer1))
 														{
-															X509_STORE_CTX_init(csc, store, user, NULL);
+															X509_STORE_CTX_init(csc, store, cer2, NULL);
 															/* Set own function to check certificates chain
 															   We can't use standard one, because it also checks expiration date of each certificate
 															   Expiration date does not matter in our case and we do redefinition of this function */
@@ -658,6 +660,7 @@ EXPORT UNSIGNED32 STDCALL TaggantValidateSignature(PTAGGANTOBJ pTaggantObj, PTAG
 										}
 										sk_X509_pop_free(certs, X509_free);
 									}
+									
 									if (res == TNOERR)
 									{
 										res = TMEMORY;
@@ -902,11 +905,14 @@ EXPORT UNSIGNED32 STDCALL TaggantComputeHashes(PTAGGANTCONTEXT pCtx, PTAGGANTOBJ
 EXPORT UNSIGNED32 STDCALL TaggantGetInfo(PTAGGANTOBJ pTaggantObj, ENUMTAGINFO eKey, UNSIGNED32 *pSize, PINFO pInfo)
 {
 	UNSIGNED32 res = TERRORKEY;
-	STACK_OF(X509)* certs = NULL;
-	int biolength = 0;
-	BIO* tmpbio = NULL;
-	X509* tmpcert = NULL;
+	STACK_OF(X509) *certs = NULL, *signers = NULL;
+	int i = 0, brk = 0, biolength = 0;
+	BIO *tmpbio = NULL;
+	X509 *tmpcert = NULL, *signer = NULL;
 	int maxlen = MAX_INTEGER;
+	ASN1_INTEGER *signerser = NULL, *tmpser = NULL;
+	BIGNUM *signerbn = NULL, *tmpbn = NULL;
+	
 
 	if (!lib_initialized)
 	{
@@ -933,58 +939,102 @@ EXPORT UNSIGNED32 STDCALL TaggantGetInfo(PTAGGANTOBJ pTaggantObj, ENUMTAGINFO eK
 		*pSize = pTaggantObj->pTagBlob->Header.Length;
 		break;
 	case ESPVCERT:
-		certs = CMS_get1_certs(pTaggantObj->CMS);
-		if (certs)
+		/* Get signer certificate */
+		signers = CMS_get0_signers(pTaggantObj->CMS);
+		if (signers)
 		{
-			/* Make sure there are 2 certificates in the CMS chain */
-			if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
+			/* Make sure there is 1 certificate */
+			if (sk_X509_num(signers) == 1)
 			{
-				tmpcert = sk_X509_value(certs, 0);
-				if (tmpcert)
+				signer = sk_X509_value(signers, 0);
+				if (signer)
 				{
-					tmpbio = BIO_new(BIO_s_mem());
-					if (tmpbio)
+					signerser = X509_get_serialNumber(signer);
+					if (signerser)
 					{
-						if (i2d_X509_bio(tmpbio, tmpcert))
+						signerbn = ASN1_INTEGER_to_BN(signerser, NULL);
+						if (signerbn)
 						{
-							/* Get bio size */
-							maxlen = MAX_INTEGER;
-							biolength = BIO_read(tmpbio, NULL, maxlen);
-							if (biolength >= 0)
+							/* Get all certificates in CMS */
+							certs = CMS_get1_certs(pTaggantObj->CMS);
+							if (certs)
 							{
-								/* Make sure input buffer is enough to store BIO data */
-								if (*pSize >= (unsigned long)biolength && pInfo != NULL)
+								/* Make sure there are 2 certificates in the CMS chain */
+								if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
 								{
-									BIO_read(tmpbio, pInfo, biolength);
-									res = TNOERR;
-								} else
-								{
-									res = TMEMORY;
+									for (i = 0; i < CERTIFICATES_IN_TAGGANT_CHAIN; i++)
+									{
+										tmpcert = sk_X509_value(certs, i);
+										if (tmpcert)
+										{
+											tmpser = X509_get_serialNumber(tmpcert);
+											if (tmpser)
+											{
+												tmpbn = ASN1_INTEGER_to_BN(tmpser, NULL);
+												if (tmpbn)
+												{
+													if (BN_cmp(signerbn, tmpbn) != 0)
+													{
+														tmpbio = BIO_new(BIO_s_mem());
+														if (tmpbio)
+														{
+															if (i2d_X509_bio(tmpbio, tmpcert))
+															{
+																/* Get bio size */
+																maxlen = MAX_INTEGER;
+																biolength = BIO_read(tmpbio, NULL, maxlen);
+																if (biolength >= 0)
+																{
+																	/* Make sure input buffer is enough to store BIO data */
+																	if (*pSize >= (unsigned long)biolength && pInfo != NULL)
+																	{
+																		BIO_read(tmpbio, pInfo, biolength);
+																		res = TNOERR;
+																	} else
+																	{
+																		res = TMEMORY;
+																	}
+																	*pSize = (unsigned long)biolength;
+																}
+															}
+															BIO_free(tmpbio);
+														}
+														brk = 1;
+													}
+													BN_free(tmpbn);
+													if (brk)
+													{
+														break;
+													}
+												}
+											}
+										}
+									}
 								}
-								*pSize = (unsigned long)biolength;
+								sk_X509_pop_free(certs, X509_free);
 							}
+							BN_free(signerbn);
 						}
-						BIO_free(tmpbio);
 					}
 				}
 			}
-			sk_X509_pop_free(certs, X509_free);
+			sk_X509_free(signers);			
 		}
 		break;
-	case EUSERCERT:
-		certs = CMS_get1_certs(pTaggantObj->CMS);
-		if (certs)
+	case EUSERCERT:	
+		signers = CMS_get0_signers(pTaggantObj->CMS);
+		if (signers)
 		{
-			/* Make sure there are 2 certificates in the CMS chain */
-			if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
+			/* Make sure there is 1 certificate */
+			if (sk_X509_num(signers) == 1)
 			{
-				tmpcert = sk_X509_value(certs, 1);
-				if (tmpcert)
+				signer = sk_X509_value(signers, 0);
+				if (signer)
 				{
 					tmpbio = BIO_new(BIO_s_mem());
 					if (tmpbio)
 					{
-						if (i2d_X509_bio(tmpbio, tmpcert))
+						if (i2d_X509_bio(tmpbio, signer))
 						{
 							/* Get bio size */
 							maxlen = MAX_INTEGER;
@@ -1007,7 +1057,7 @@ EXPORT UNSIGNED32 STDCALL TaggantGetInfo(PTAGGANTOBJ pTaggantObj, ENUMTAGINFO eK
 					}
 				}
 			}
-			sk_X509_pop_free(certs, X509_free);
+			sk_X509_free(signers);
 		}
 		break;
 	case EFILEEND:
@@ -1030,7 +1080,7 @@ EXPORT UNSIGNED32 STDCALL TaggantGetInfo(PTAGGANTOBJ pTaggantObj, ENUMTAGINFO eK
 
 #ifdef SPV_LIBRARY
 
-EXPORT UNSIGNED32 STDCALL TaggantPrepare(PTAGGANTOBJ pTaggantObj, PVOID pLicense, PVOID pTaggantOut, UNSIGNED32 *uTaggantReservedSize)
+EXPORT UNSIGNED32 STDCALL TaggantPrepare(PTAGGANTOBJ pTaggantObj, const PVOID pLicense, PVOID pTaggantOut, UNSIGNED32 *uTaggantReservedSize)
 {
 	UNSIGNED32 res = TBADKEY;
 	BIO* licbio = NULL;
@@ -1408,7 +1458,7 @@ EXPORT void STDCALL TaggantContextFree(PTAGGANTCONTEXT pTaggantCtx)
 
 #ifdef SPV_LIBRARY
 
-EXPORT UNSIGNED32 STDCALL TaggantGetLicenseExpirationDate(PVOID pLicense, UNSIGNED64 *pTime)
+EXPORT UNSIGNED32 STDCALL TaggantGetLicenseExpirationDate(const PVOID pLicense, UNSIGNED64 *pTime)
 {
 	UNSIGNED32 res = TBADKEY;
 	BIO *licbio = NULL;
@@ -1587,8 +1637,9 @@ UNSIGNED32 compare_default_hash(PTAGGANTBLOB pTagBlob1, PTAGGANTBLOB pTagBlob2)
 			pTagBlob1->Hash.FullFile.ExtendedHash.Header.Type == pTagBlob2->Hash.FullFile.ExtendedHash.Header.Type &&
 			pTagBlob1->Hash.FullFile.ExtendedHash.Header.Type == TAGGANT_HASBLOB_EXTENDED &&
 			(memcmp(&pTagBlob1->Hash.FullFile.ExtendedHash.Header.Hash, &pTagBlob2->Hash.FullFile.ExtendedHash.Header.Hash, sizeof(pTagBlob1->Hash.FullFile.ExtendedHash.Header.Hash)) == 0) &&
-			pTagBlob1->Hash.FullFile.ExtendedHash.PhysicalEnd == pTagBlob2->Hash.FullFile.ExtendedHash.PhysicalEnd
-			)
+			(!pTagBlob1->Hash.FullFile.ExtendedHash.PhysicalEnd ||
+			 (pTagBlob1->Hash.FullFile.ExtendedHash.PhysicalEnd == pTagBlob2->Hash.FullFile.ExtendedHash.PhysicalEnd))
+		)
 		{
 			res = TNOERR;
 		}
@@ -1635,7 +1686,7 @@ EXPORT UNSIGNED32 STDCALL TaggantValidateDefaultHashes(PTAGGANTCONTEXT pCtx, PTA
 			}
 			if (ds_offset != 0 && ds_size != 0)
 			{
-				if ((ds_offset + ds_size) != uFileEnd || ds_offset != pTaggantObj->pTagBlob->Hash.FullFile.ExtendedHash.PhysicalEnd)
+				if ((ds_offset + ds_size) != uFileEnd)
 				{
 					valid_ds = 0;
 				} else
@@ -1643,10 +1694,7 @@ EXPORT UNSIGNED32 STDCALL TaggantValidateDefaultHashes(PTAGGANTCONTEXT pCtx, PTA
 					file_end -= ds_size;
 				}
 			}
-			if (valid_ds && file_end == pTaggantObj->pTagBlob->Hash.FullFile.ExtendedHash.PhysicalEnd)
-			{
-				valid_file = 1;
-			}
+			valid_file = valid_ds;
 		} else
 		{
 			file_end = pTaggantObj->pTagBlob->Hash.FullFile.ExtendedHash.PhysicalEnd;
