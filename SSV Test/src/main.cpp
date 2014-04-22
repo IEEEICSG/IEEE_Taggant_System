@@ -27,31 +27,35 @@ void print_tag_info(PTAGGANTOBJ tag_obj, ENUMTAGINFO eKey)
 {
 	long unsigned int tag_info_size = 0;
 	// Get the length of the eKey taggant information
-	TaggantGetInfo(tag_obj, eKey, &tag_info_size, NULL);
-	// Allocate enough buffer
-	char* taginfo = new char[tag_info_size];
-	// Get the eKey taggant information
-	TaggantGetInfo(tag_obj, eKey, &tag_info_size, taginfo);
-	// Print taggant information
-	if (tag_info_size > 0)
+	if (TaggantGetInfo(tag_obj, eKey, &tag_info_size, NULL) == TMEMORY)
 	{
-		for (int i = 0; i <= (int)tag_info_size / 16; i++)
+		// Allocate enough buffer
+		char* taginfo = new char[tag_info_size];
+		// Get the eKey taggant information
+		if (TaggantGetInfo(tag_obj, eKey, &tag_info_size, taginfo) == TNOERR)
 		{
-			int k = tag_info_size - i * 16;
-			if (k > 0)
+			// Print taggant information
+			if (tag_info_size > 0)
 			{
-				k = (k < 16) ? k : 16;
-				cout << "     ";
-				for (int j = 0; j < k; j++)
+				for (int i = 0; i <= (int)tag_info_size / 16; i++)
 				{
-					printf("%02x ", (BYTE)taginfo[i * 16 + j]);
+					int k = tag_info_size - i * 16;
+					if (k > 0)
+					{
+						k = (k < 16) ? k : 16;
+						cout << "     ";
+						for (int j = 0; j < k; j++)
+						{
+							printf("%02x ", (BYTE)taginfo[i * 16 + j]);
+						}
+						cout << "\n";
+					}
 				}
-				cout << "\n";
 			}
 		}
+		// Free buffer
+		delete[] taginfo;
 	}
-	// Free buffer
-	delete[] taginfo;
 	//
 	return;
 }
@@ -91,8 +95,8 @@ void seekdir(PTAGGANTCONTEXT pCtx, char* cacert, char* tscert, string path)
 								// Validate the taggant
 								if (TaggantValidateSignature(tag_obj, (PTAGGANT)taggant, (PVOID)cacert) == TNOERR)
 								{
-									cout << " - taggant is correct\n";
 
+									cout << " - taggant is correct\n";
 									// Check if the TS exists
 									unsigned long long timest = 0;
 									if (TaggantGetTimestamp(tag_obj, &timest, (PVOID)tscert) == TNOERR)
@@ -109,7 +113,6 @@ void seekdir(PTAGGANTCONTEXT pCtx, char* cacert, char* tscert, string path)
 
 									// Get file hash type
 									int res = TNOERR;
-
 									// Do a quick file check using hash map (in case it exists)
 									PHASHBLOB_HASHMAP_DOUBLE dbl = NULL;
 									int dbl_count = TaggantGetHashMapDoubles(tag_obj, &dbl);
@@ -169,6 +172,8 @@ void seekdir(PTAGGANTCONTEXT pCtx, char* cacert, char* tscert, string path)
 										cout << " - User Certificate\n";
 										print_tag_info(tag_obj, EUSERCERT);
 									}
+
+
 								} else {
 									cout << " - taggant is invalid\n";
 								}

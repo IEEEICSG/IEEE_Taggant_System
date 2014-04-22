@@ -49,6 +49,7 @@ int winpe_is_pe64(PE_ALL_HEADERS* peh)
 
 int winpe_object_size(ifstream* fp, PE_ALL_HEADERS* peh)
 {
+	UNSIGNED64 filelength;
 	int res = -1;
 
 	// check is number of sections greater zero
@@ -83,7 +84,8 @@ int winpe_object_size(ifstream* fp, PE_ALL_HEADERS* peh)
 			}
 		}
 	}
-	return res;
+	filelength = fileio_fsize(fp);
+	return min(res, (int) filelength);
 }
 
 int winpe_va_to_rwa(ifstream* fp, PE_ALL_HEADERS* peh, unsigned long va)

@@ -109,9 +109,9 @@ EXPORT PPACKERINFO STDCALL TaggantPackerInfo(PTAGGANTOBJ pTaggantObj);
 
 #ifdef SPV_LIBRARY
 	EXPORT UNSIGNED32 STDCALL TaggantComputeHashes(PTAGGANTCONTEXT pCtx, PTAGGANTOBJ pTaggantObj, PFILEOBJECT hFile, UNSIGNED64 uObjectEnd, UNSIGNED64 uFileEnd, UNSIGNED32 uTaggantSize);
-	EXPORT UNSIGNED32 STDCALL TaggantGetLicenseExpirationDate(PVOID pLicense, UNSIGNED64 *pTime);
+	EXPORT UNSIGNED32 STDCALL TaggantGetLicenseExpirationDate(const PVOID pLicense, UNSIGNED64 *pTime);
 	EXPORT UNSIGNED32 STDCALL TaggantAddHashRegion(PTAGGANTOBJ pTaggantObj, UNSIGNED64 uOffset, UNSIGNED64 uLength);
-	EXPORT UNSIGNED32 STDCALL TaggantPrepare(PTAGGANTOBJ pTaggantObj, PVOID pLicense, PVOID pTaggantOut, UNSIGNED32 *uTaggantReservedSize);
+	EXPORT UNSIGNED32 STDCALL TaggantPrepare(PTAGGANTOBJ pTaggantObj, const PVOID pLicense, PVOID pTaggantOut, UNSIGNED32 *uTaggantReservedSize);
 	EXPORT UNSIGNED32 STDCALL TaggantPutTimestamp(PTAGGANTOBJ pTaggantObj, const char* pTSUrl, UNSIGNED32 uTimeout);
 #endif
 

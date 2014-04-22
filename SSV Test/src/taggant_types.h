@@ -129,7 +129,7 @@ typedef struct
 
 typedef struct
 {
-	int size;
+	size_t size;
 	/* File IO callbacks */
 	size_t (__DECLARATION *FileReadCallBack)(PFILEOBJECT, void*, size_t);
 	int (__DECLARATION *FileSeekCallBack)(PFILEOBJECT, UNSIGNED64, int);
@@ -138,7 +138,7 @@ typedef struct
 
 typedef struct
 {
-	int size;
+	size_t size;
 	/* Memory callbacks */
 	void* (__DECLARATION *MemoryAllocCallBack)(size_t);
 	void* (__DECLARATION *MemoryReallocCallBack)(void*, size_t);
