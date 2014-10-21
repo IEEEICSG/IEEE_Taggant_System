@@ -75,7 +75,7 @@
 #define UNSIGNED8 unsigned char
 #define UNSIGNED16 unsigned short
 #define SIGNED32 int
-#define UNSIGNED32 unsigned long
+#define UNSIGNED32 unsigned int
 
 #if (defined(_WIN32) || defined(_WIN64)) && !defined(__MINGW32__)
 typedef unsigned __int64 UNSIGNED64;
