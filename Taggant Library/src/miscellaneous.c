@@ -65,22 +65,22 @@
 #include "taggantlib.h"
 #include "endianness.h"
 
-long round_up(long alignment, long size)
+unsigned long round_up(unsigned long alignment, unsigned long size)
 {
 	return (size + alignment - 1) &- alignment;
 }
 
-long round_down(long alignment, long size)
+unsigned long round_down(unsigned long alignment, unsigned long size)
 {
 	return size &- alignment;
 }
 
-long get_min(long v1, long v2)
+unsigned long get_min(unsigned long v1, unsigned long v2)
 {
 	return (v1 < v2) ? v1 : v2;
 }
 
-long get_max(long v1, long v2)
+unsigned long get_max(unsigned long v1, unsigned long v2)
 {
 	return (v1 > v2) ? v1 : v2;
 }
