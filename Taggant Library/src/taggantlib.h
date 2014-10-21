@@ -69,13 +69,16 @@
 
 #ifdef WIN32
 #	define STDCALL __stdcall
+#else
+#	define STDCALL
+#endif
+#if defined(WIN32) && !defined(TAGGANT_STATIC)
 #	ifdef __cplusplus
 #		define EXPORT extern "C" __declspec (dllexport)
 #	else
-#		define EXPORT __declspec (dllexport) 
+#		define EXPORT __declspec (dllexport)
 #	endif
 #else
-#	define STDCALL 
 #	ifdef __cplusplus
 #		define EXPORT extern "C"
 #	else
