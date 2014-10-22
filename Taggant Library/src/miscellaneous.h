@@ -65,10 +65,10 @@
 
 #include "taggant_types.h"
 
-long round_up(long alignment, long size);
-long round_down(long alignment, long size);
-long get_min(long v1, long v2);
-long get_max(long v1, long v2);
+unsigned long round_up(unsigned long alignment, unsigned long size);
+unsigned long round_down(unsigned long alignment, unsigned long size);
+unsigned long get_min(unsigned long v1, unsigned long v2);
+unsigned long get_max(unsigned long v1, unsigned long v2);
 UNSIGNED64 get_file_size (PTAGGANTCONTEXT pCtx, PFILEOBJECT fp);
 
 int file_seek(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, UNSIGNED64 offset, int type);
