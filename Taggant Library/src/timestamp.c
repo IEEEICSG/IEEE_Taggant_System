@@ -268,6 +268,7 @@ http_redirect:
 	    }
 	    memcpy(urlBuffer, resultBuffer, resultLength);
 	    memory_free(resultBuffer);
+	    resultBuffer = NULL;
 	    redirection++;
 		goto http_redirect;
 	} else
