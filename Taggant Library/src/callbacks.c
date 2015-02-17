@@ -101,11 +101,7 @@ void* __DECLARATION internal_alloc (size_t size)
 
 void* __DECLARATION internal_realloc (void* buffer, size_t size)
 {
-	if (buffer != NULL)
-	{
-		return realloc(buffer, size);
-	}
-	return internal_alloc(size);
+	return realloc(buffer, size);
 }
 
 void __DECLARATION internal_free(void* buffer)
@@ -121,18 +117,7 @@ void* memory_alloc (size_t size)
 
 void* memory_realloc (void* buffer, size_t size)
 {
-	void *ptmp;
-	if (buffer != NULL)
-	{
-		ptmp = callbacks.MemoryReallocCallBack(buffer, size);
-		/* Check if realloc failed */
-		if (ptmp == NULL && size != 0)
-		{
-			memory_free(buffer);
-		}
-		return ptmp;
-	}
-	return memory_alloc(size);
+	return callbacks.MemoryReallocCallBack(buffer, size);
 }
 
 void memory_free(void* buffer)
