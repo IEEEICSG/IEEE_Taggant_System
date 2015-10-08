@@ -1,0 +1,19 @@
+LIBRARY	"libspv"
+EXPORTS 
+
+TaggantInitializeLibrary
+TaggantFinalizeLibrary
+TaggantObjectNew
+TaggantObjectNewEx
+TaggantObjectFree
+TaggantContextNew
+TaggantContextNewEx
+TaggantContextFree
+TaggantPackerInfo
+TaggantPutInfo
+
+TaggantComputeHashes
+TaggantGetLicenseExpirationDate
+TaggantAddHashRegion
+TaggantPrepare
+TaggantPutTimestamp

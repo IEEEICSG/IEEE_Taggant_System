@@ -1,0 +1,22 @@
+LIBRARY	"libssv"
+EXPORTS 
+
+TaggantInitializeLibrary
+TaggantFinalizeLibrary
+TaggantObjectNew
+TaggantObjectNewEx
+TaggantObjectFree
+TaggantContextNew
+TaggantContextNewEx
+TaggantContextFree
+TaggantPackerInfo
+
+TaggantGetHashMapDoubles
+TaggantValidateDefaultHashes
+TaggantValidateHashMap
+TaggantGetTaggant
+TaggantFreeTaggant
+TaggantValidateSignature
+TaggantGetInfo
+TaggantGetTimestamp
+TaggantCheckCertificate

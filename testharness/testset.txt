@@ -1,0 +1,318 @@
+creation:
+
+- add v1 Taggant to 32-bit PE file containing no Taggant and no overlay(*1)							(should pass)
+- add v2 Taggant to 32-bit PE file containing no Taggant and no overlay								(should pass)
+- add v1 Taggant to 32-bit PE file containing v1 Taggant and no overlay								(should pass but one v1 Taggant)
+- add v1 Taggant to 32-bit PE file containing v2 Taggant and no overlay								(should pass but one v2 Taggant or one v1 Taggant visible, depending on v1 placement)
+- add v2 Taggant to 32-bit PE file containing v1 Taggant and no overlay								(should pass)
+- add v2 Taggant to 32-bit PE file containing v2 Taggant and no overlay								(should pass)
+- add v2 Taggant to 32-bit PE file containing v2 Taggant and v1 Taggant and no overlay						(should pass)
+
+- add v1 Taggant to 64-bit PE file containing no Taggant and no overlay(*1)							(should pass)
+- add v2 Taggant to 64-bit PE file containing no Taggant and no overlay								(should pass)
+- add v1 Taggant to 64-bit PE file containing v1 Taggant and no overlay								(should pass but one v1 Taggant)
+- add v1 Taggant to 64-bit PE file containing v2 Taggant and no overlay								(should pass but one v2 Taggant or one v1 Taggant visible, depending on v1 placement)
+- add v2 Taggant to 64-bit PE file containing v1 Taggant and no overlay								(should pass)
+- add v2 Taggant to 64-bit PE file containing v2 Taggant and no overlay								(should pass)
+- add v2 Taggant to 64-bit PE file containing v2 Taggant and v1 Taggant and no overlay						(should pass)
+
+- add v1 Taggant to 32-bit PE file containing no Taggant and overlay								(should pass)
+- add v2 Taggant to 32-bit PE file containing no Taggant and overlay								(should pass)
+- add v1 Taggant to 32-bit PE file containing v1 Taggant and overlay								(should pass but one v1 Taggant)
+- add v1 Taggant to 32-bit PE file containing v2 Taggant and overlay								(should pass but one v2 Taggant or one v1 Taggant visible, depending on v1 placement)
+- add v2 Taggant to 32-bit PE file containing v1 Taggant and overlay								(should pass)
+- add v2 Taggant to 32-bit PE file containing v2 Taggant and overlay								(should pass)
+- add v2 Taggant to 32-bit PE file containing v2 Taggant and v1 Taggant and overlay						(should pass)
+
+- add v1 Taggant to 64-bit PE file containing no Taggant and overlay								(should pass)
+- add v2 Taggant to 64-bit PE file containing no Taggant and overlay								(should pass)
+- add v1 Taggant to 64-bit PE file containing v1 Taggant and overlay								(should pass but one v1 Taggant)
+- add v1 Taggant to 64-bit PE file containing v2 Taggant and overlay								(should pass but one v2 Taggant or one v1 Taggant visible, depending on v1 placement)
+- add v2 Taggant to 64-bit PE file containing v1 Taggant and overlay								(should pass)
+- add v2 Taggant to 64-bit PE file containing v2 Taggant and overlay								(should pass)
+- add v2 Taggant to 64-bit PE file containing v2 Taggant and v1 Taggant and overlay						(should pass)
+
+- add v1 Taggant to 32-bit PE file containing tampered v1 Taggant								(should pass but one v1 Taggant)
+- add v1 Taggant to 32-bit PE file containing tampered v2 Taggant								(should pass but one v1 Taggant)
+
+CSA mode
+- add v2 Taggant to 32-bit PE file containing tampered v1 Taggant								(should fail)
+- add v2 Taggant to 32-bit PE file containing tampered v2 Taggant								(should fail)
+/CSA mode
+
+- add v1 Taggant to 64-bit PE file containing tampered v1 Taggant								(should pass but one v1 Taggant)
+- add v1 Taggant to 64-bit PE file containing tampered v2 Taggant								(should pass but one v1 Taggant)
+
+CSA mode
+- add v2 Taggant to 64-bit PE file containing tampered v1 Taggant								(should fail)
+- add v2 Taggant to 64-bit PE file containing tampered v2 Taggant								(should fail)
+/CSA mode
+
+- add v1 Taggant to 32-bit PE file containing good v1 Taggant and tampered image						(should pass but one v1 Taggant)
+- add v1 Taggant to 32-bit PE file containing good v2 Taggant and tampered image						(should pass but one v1 Taggant)
+
+- add v1 Taggant to 64-bit PE file containing good v1 Taggant and tampered image						(should pass but one v1 Taggant)
+- add v1 Taggant to 64-bit PE file containing good v2 Taggant and tampered image						(should pass but one v1 Taggant)
+
+CSA mode
+- add v2 Taggant to 32-bit PE file containing good v1 Taggant and tampered image						(should fail)
+- add v2 Taggant to 32-bit PE file containing good v2 Taggant and tampered image						(should fail)
+
+- add v2 Taggant to 64-bit PE file containing good v1 Taggant and tampered image						(should fail)
+- add v2 Taggant to 64-bit PE file containing good v2 Taggant and tampered image						(should fail)
+/CSA mode
+
+- add v1 Taggant HashMap to 32-bit PE file containing no Taggant								(should pass)
+- add v2 Taggant HashMap to 32-bit PE file containing no Taggant								(should pass)
+- add v2 Taggant to 32-bit PE file containing v1 HashMap Taggant								(should pass)
+- add v2 Taggant to 32-bit PE file containing v2 HashMap Taggant								(should pass)
+- add v2 Taggant to 32-bit PE file containing v2 Taggant and v1 HashMap Taggant							(should pass)
+
+- add v1 Taggant HashMap to 64-bit PE file containing no Taggant								(should pass)
+- add v2 Taggant HashMap to 64-bit PE file containing no Taggant								(should pass)
+- add v2 Taggant to 64-bit PE file containing v1 HashMap Taggant								(should pass)
+- add v2 Taggant to 64-bit PE file containing v2 HashMap Taggant								(should pass)
+- add v2 Taggant to 64-bit PE file containing v2 Taggant and v1 HashMap Taggant							(should pass)
+
+- add v1 Taggant to 32-bit PE file containing good v1 Taggant and broken HMH and good image					(should pass but one v1 Taggant)
+- add v1 Taggant to 32-bit PE file containing good v2 Taggant and broken HMH and good image					(should pass but one v1 Taggant)
+
+CSA mode
+- add v2 Taggant to 32-bit PE file containing good v1 Taggant and broken HMH and good image					(should pass and set EIGNOREHMH)
+- add v2 Taggant to 32-bit PE file containing good v2 Taggant and broken HMH and good image					(should pass and set EIGNOREHMH)
+/CSA mode
+
+- add v1 Taggant to 64-bit PE file containing good v1 Taggant and broken HMH and good image					(should pass but one v1 Taggant)
+- add v1 Taggant to 64-bit PE file containing good v2 Taggant and broken HMH and good image					(should pass but one v1 Taggant)
+
+CSA mode
+- add v2 Taggant to 64-bit PE file containing good v1 Taggant and broken HMH and good image					(should pass and set EIGNOREHMH)
+- add v2 Taggant to 64-bit PE file containing good v2 Taggant and broken HMH and good image					(should pass and set EIGNOREHMH)
+/CSA mode
+
+- add v1 Taggant without timestamp to 32-bit PE file										(should pass)
+- add v2 Taggant without timestamp to 32-bit PE file										(should pass)
+- add v1 Taggant with timestamp to 32-bit PE file containing v1 Taggant without timestamp					(should pass but one v1 Taggant)
+- add v1 Taggant with timestamp to 32-bit PE file containing v2 Taggant without timestamp					(should pass but one v2 Taggant or one v1 Taggant visible, depending on v1 placement)
+- add v2 Taggant with timestamp to 32-bit PE file containing v1 Taggant without timestamp					(should pass)
+- add v2 Taggant with timestamp to 32-bit PE file containing v2 Taggant without timestamp					(should pass)
+- add v2 Taggant with timestamp to 32-bit PE file containing v2 Taggant with timestamp and v1 Taggant without timestamp		(should pass)
+- add v2 Taggant without timestamp to 32-bit PE file containing v1 Taggant with timestamp					(should pass)
+- add v2 Taggant without timestamp to 32-bit PE file containing v2 Taggant with timestamp					(should pass)
+- add v2 Taggant with timestamp to 32-bit PE file containing v2 Taggant without timestamp and v1 Taggant with timestamp		(should pass)
+
+- add v1 Taggant without timestamp to 64-bit PE file										(should pass)
+- add v2 Taggant without timestamp to 64-bit PE file										(should pass)
+- add v1 Taggant with timestamp to 64-bit PE file containing v1 Taggant without timestamp					(should pass but one v1 Taggant)
+- add v1 Taggant with timestamp to 64-bit PE file containing v2 Taggant without timestamp					(should pass but one v2 Taggant or one v1 Taggant visible, depending on v1 placement)
+- add v2 Taggant with timestamp to 64-bit PE file containing v1 Taggant without timestamp					(should pass)
+- add v2 Taggant with timestamp to 64-bit PE file containing v2 Taggant without timestamp					(should pass)
+- add v2 Taggant with timestamp to 64-bit PE file containing v2 Taggant with timestamp and v1 Taggant without timestamp		(should pass)
+- add v2 Taggant without timestamp to 64-bit PE file containing v1 Taggant with timestamp					(should pass)
+- add v2 Taggant without timestamp to 64-bit PE file containing v2 Taggant with timestamp					(should pass)
+- add v2 Taggant with timestamp to 64-bit PE file containing v2 Taggant without timestamp and v1 Taggant with timestamp		(should pass)
+
+- add data to v1 ExtraBlob													(should fail)
+- add duplicated tag to 32-bit v2 ExtraBlob											(should pass and replace)
+- add duplicated tag to 64-bit v2 ExtraBlob											(should pass and replace)
+- add single data of > 64kb to v2 ExtraBlob											(should fail)
+- add total data of > 64kb to v2 ExtraBlob											(should fail)
+
+- add v2 Taggant to 32-bit PE file containing v1 Taggant and full v2 ExtraBlob							(should fail)
+- add v2(a) Taggant to 32-bit PE file containing v2(b) Taggant and full v2(a) ExtraBlob						(should fail)
+
+- add v2 Taggant to 64-bit PE file containing v1 Taggant and full v2 ExtraBlob							(should fail)
+- add v2(a) Taggant to 64-bit PE file containing v2(b) Taggant and full v2(a) ExtraBlob						(should fail)
+
+- add v1 Taggant to JS file													(should fail)
+- add v2 Taggant to JS file													(should pass)
+- add v2 Taggant to JS file containing v2 Taggant										(should pass)
+
+- add v2 JS Taggant to 32-bit PE file												(should pass)
+- add v2 PE Taggant to 32-bit PE file containing v2 JS Taggant									(should pass)
+- add v2 PE Taggant to JS file													(should fail)
+
+- add v2 JS Taggant to 64-bit PE file												(should pass)
+- add v2 PE Taggant to 64-bit PE file containing v2 JS Taggant									(should pass)
+
+
+verification:
+general:
+- 32-bit PE file containing no Taggant												(should fail)
+- 32-bit PE file containing good v1 Taggant and good image and no overlay							(should pass v1)
+- 32-bit PE file containing good v2 Taggant and good image and no overlay							(should pass v2)
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and good image and no overlay					(should pass v2 and pass v1)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good image and no overlay				(should pass v2(a) and pass v2(b))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and good image and no overlay		(should pass v2(a) and pass v2(b) and pass v1)
+
+- 64-bit PE file containing no Taggant												(should fail)
+- 64-bit PE file containing good v1 Taggant and good image and no overlay							(should pass v1)
+- 64-bit PE file containing good v2 Taggant and good image and no overlay							(should pass v2)
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and good image and no overlay					(should pass v2 and pass v1)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good image and no overlay				(should pass v2(a) and pass v2(b))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and good image and no overlay		(should pass v2(a) and pass v2(b) and pass v1)
+
+- 32-bit PE file containing good v1 Taggant and good image and good overlay							(should pass v1)
+- 32-bit PE file containing good v2 Taggant and good image and good overlay							(should pass v2)
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and good image and good overlay					(should pass v2 and pass v1)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good image and good overlay				(should pass v2(a) and pass v2(b))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and good image and good overlay	(should pass v2(a) and pass v2(b) and pass v1)
+
+- 64-bit PE file containing good v1 Taggant and good image and good overlay							(should pass v1)
+- 64-bit PE file containing good v2 Taggant and good image and good overlay							(should pass v2)
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and good image and good overlay					(should pass v2 and pass v1)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good image and good overlay				(should pass v2(a) and pass v2(b))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and good image and good overlay	(should pass v2(a) and pass v2(b) and pass v1)
+
+- 32-bit PE file containing good v1 Taggant and good image and tampered overlay							(should pass v1!)
+- 32-bit PE file containing good v2 Taggant and good image and tampered overlay							(should pass v2!)
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and good image and tampered overlay				(should pass v2 and pass v1!)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good image and tampered overlay			(should pass v2(a) and pass v2(b)!)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and good image and tampered overlay	(should pass v2(a) and pass v2(b) and pass v1!)
+
+- 64-bit PE file containing good v1 Taggant and good image and tampered overlay							(should pass v1!)
+- 64-bit PE file containing good v2 Taggant and good image and tampered overlay							(should pass v2!)
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and good image and tampered overlay				(should pass v2 and pass v1!)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good image and tampered overlay			(should pass v2(a) and pass v2(b)!)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and good image and tampered overlay	(should pass v2(a) and pass v2(b) and pass v1!)
+
+- 32-bit PE file containing tampered v1 Taggant											(should fail v1)
+- 32-bit PE file containing tampered v2 Taggant											(should fail v2)
+- 32-bit PE file containing good v2 Taggant and tampered v1 Taggant								(should fail v2)
+- 32-bit PE file containing good v2(a) Taggant and tampered v2(b) Taggant							(should fail v2(a))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and tampered v1 Taggant					(should pass v2(a) and fail v2(b))
+
+- 64-bit PE file containing tampered v1 Taggant											(should fail v1)
+- 64-bit PE file containing tampered v2 Taggant											(should fail v2)
+- 64-bit PE file containing good v2 Taggant and tampered v1 Taggant								(should fail v2)
+- 64-bit PE file containing good v2(a) Taggant and tampered v2(b) Taggant							(should fail v2(a))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and tampered v1 Taggant					(should pass v2(a) and fail v2(b))
+
+- 32-bit PE file containing good v1 Taggant and good v2 Taggant (v1 at eof) and good image					(added as v2 then v1, should pass v1)
+- 32-bit PE file containing good v1 Taggant and good v2 Taggant (v2 at eof) and good image					(added as v2 then v1, should fail v2)
+
+- 64-bit PE file containing good v1 Taggant and good v2 Taggant (v1 at eof) and good image					(added as v2 then v1, should pass v1)
+- 64-bit PE file containing good v1 Taggant and good v2 Taggant (v2 at eof) and good image					(added as v2 then v1, should fail v2)
+
+HMH:
+- 32-bit PE file containing good v1 Taggant and tampered HMH region								(should fail v1)
+- 32-bit PE file containing good v1 Taggant and tampered non-HMH region								(should pass v1)
+- 32-bit PE file containing good v2 Taggant and tampered HMH region								(should fail v2)
+- 32-bit PE file containing good v2 Taggant and tampered non-HMH region								(should pass v2)
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and tampered v1 HMH region					(should pass v2 and fail v1)
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and tampered non-HMH region					(should pass v2 and pass v1)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and tampered v2(b) HMH region				(should pass v2(a) and fail v2(b))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and tampered non-HMH region				(should pass v2(a) and pass v2(b))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and tampered v1 HMH region		(should pass v2(a) and pass v2(b) and fail v1)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and tampered non-HMH region		(should pass v2(a) and pass v2(b) and pass v1)
+
+CSA mode
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and broken HMH has EIGNOREHMH					(should pass)
+- 32-bit PE file containing good v2 Taggant and good v2 Taggant and broken HMH has EIGNOREHMH					(should pass)
+/CSA mode
+
+- 64-bit PE file containing good v1 Taggant and tampered HMH region								(should fail v1)
+- 64-bit PE file containing good v1 Taggant and tampered non-HMH region								(should pass v1)
+- 64-bit PE file containing good v2 Taggant and tampered HMH region								(should fail v2)
+- 64-bit PE file containing good v2 Taggant and tampered non-HMH region								(should pass v2)
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and tampered v1 HMH region					(should pass v2 and fail v1)
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and tampered non-HMH region					(should pass v2 and pass v1)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and tampered v2(b) HMH region				(should pass v2(a) and fail v2(b))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and tampered non-HMH region				(should pass v2(a) and pass v2(b))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and tampered v1 HMH region		(should pass v2(a) and pass v2(b) and fail v1)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and tampered non-HMH region		(should pass v2(a) and pass v2(b) and pass v1)
+
+CSA mode
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and broken HMH has EIGNOREHMH					(should pass)
+- 64-bit PE file containing good v2 Taggant and good v2 Taggant and broken HMH has EIGNOREHMH					(should pass)
+/CSA mode
+
+EIGNOREHMH (or SSV policy):
+- 32-bit PE file containing good v1 Taggant and tampered image									(should fail v1)
+- 32-bit PE file containing good v2 Taggant and tampered image									(should fail v2)
+- 32-bit PE file containing good v2 Taggant and good v1(EIH) Taggant and tampered v1 image					(should pass v2 and fail v1)
+- 32-bit PE file containing good v2(EIH) Taggant and good v1 Taggant and tampered v1 image					(should fail v2)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b(EIH)) Taggant and tampered v2(b) image				(should pass v2(a) and fail v2(b))
+- 32-bit PE file containing good v2(a(EIH)) Taggant and good v2(b) Taggant and tampered v2(b) image				(should fail v2(a))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1(EIH) Taggant and tampered v1 image		(should pass v2(a) and pass v2(b) and fail v1)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b(EIH)) Taggant and good v1 Taggant and tampered v1 image		(should pass v2(a) and fail v2(b))
+- 32-bit PE file containing good v2(a(EIH)) Taggant and good v2(b) Taggant and good v1 Taggant and tampered v1 image		(should fail v2(a))
+
+- 64-bit PE file containing good v1 Taggant and tampered image									(should fail v1)
+- 64-bit PE file containing good v2 Taggant and tampered image									(should fail v2)
+- 64-bit PE file containing good v2 Taggant and good v1(EIH) Taggant and tampered v1 image					(should pass v2 and fail v1)
+- 64-bit PE file containing good v2(EIH) Taggant and good v1 Taggant and tampered v1 image					(should fail v2)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b(EIH)) Taggant and tampered v2(b) image				(should pass v2(a) and fail v2(b))
+- 64-bit PE file containing good v2(a(EIH)) Taggant and good v2(b) Taggant and tampered v2(b) image				(should fail v2(a))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1(EIH) Taggant and tampered v1 image		(should pass v2(a) and pass v2(b) and fail v1)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b(EIH)) Taggant and good v1 Taggant and tampered v1 image		(should pass v2(a) and fail v2(b))
+- 64-bit PE file containing good v2(a(EIH)) Taggant and good v2(b) Taggant and good v1 Taggant and tampered v1 image		(should fail v2(a))
+
+timestamp:
+- 32-bit PE file containing good v1(TS) Taggant											(should pass v1)
+- 32-bit PE file containing bad v1(TS) Taggant											(should fail v1)
+- 32-bit PE file containing good v2(TS) Taggant											(should pass v2)
+- 32-bit PE file containing bad v2(TS) Taggant											(should fail v2)
+- 32-bit PE file containing good v2(TS) Taggant and good v1(TS)									(should	pass v2 and pass v1)
+- 32-bit PE file containing good v2(TS) Taggant and bad v1(TS) Taggant								(should pass v2 and fail v1)
+- 32-bit PE file containing bad v2(TS) Taggant and good v1(TS) Taggant								(should fail v2)
+- 32-bit PE file containing good v2(a(TS)) Taggant and good v2(b(TS)) Taggant 							(should pass v2(a) and pass v2(b))
+- 32-bit PE file containing good v2(a(TS)) Taggant and bad v2(b(TS)) Taggant							(should pass v2(a) and fail v2(b))
+- 32-bit PE file containing bad v2(a(TS)) Taggant and good v2(b(TS)) Taggant 							(should fail v2(a))
+- 32-bit PE file containing good v2(a(TS)) Taggant and good v2(b(TS)) Taggant and good v1(TS) Taggant 				(should pass v2(a) and pass v2(b) and pass v1)
+- 32-bit PE file containing good v2(a(TS)) Taggant and good v2(b(TS)) Taggant and bad v1(TS) Taggant				(should pass v2(a) and pass v2(b) and fail v1)
+- 32-bit PE file containing good v2(a(TS)) Taggant and bad v2(b(TS)) Taggant and good v1(TS) Taggant				(should pass v2(a) and fail v2(b))
+
+- 64-bit PE file containing good v1(TS) Taggant											(should pass v1)
+- 64-bit PE file containing bad v1(TS) Taggant											(should fail v1)
+- 64-bit PE file containing good v2(TS) Taggant											(should pass v2)
+- 64-bit PE file containing bad v2(TS) Taggant											(should fail v2)
+- 64-bit PE file containing good v2(TS) Taggant and good v1(TS)									(should	pass v2 and pass v1)
+- 64-bit PE file containing good v2(TS) Taggant and bad v1(TS) Taggant								(should pass v2 and fail v1)
+- 64-bit PE file containing bad v2(TS) Taggant and good v1(TS) Taggant								(should fail v2)
+- 64-bit PE file containing good v2(a(TS)) Taggant and good v2(b(TS)) Taggant 							(should pass v2(a) and pass v2(b))
+- 64-bit PE file containing good v2(a(TS)) Taggant and bad v2(b(TS)) Taggant							(should pass v2(a) and fail v2(b))
+- 64-bit PE file containing bad v2(a(TS)) Taggant and good v2(b(TS)) Taggant 							(should fail v2(a))
+- 64-bit PE file containing good v2(a(TS)) Taggant and good v2(b(TS)) Taggant and good v1(TS) Taggant 				(should pass v2(a) and pass v2(b) and pass v1)
+- 64-bit PE file containing good v2(a(TS)) Taggant and good v2(b(TS)) Taggant and bad v1(TS) Taggant				(should pass v2(a) and pass v2(b) and fail v1)
+- 64-bit PE file containing good v2(a(TS)) Taggant and bad v2(b(TS)) Taggant and good v1(TS) Taggant				(should pass v2(a) and fail v2(b))
+
+overlay:
+- 32-bit PE file containing good v1 Taggant and unexpected appended data							(should fail v1)
+- 32-bit PE file containing good v2 Taggant and unexpected appended data							(should fail - no Taggant)
+
+- 64-bit PE file containing good v1 Taggant and unexpected appended data							(should fail v1)
+- 64-bit PE file containing good v2 Taggant and unexpected appended data							(should fail - no Taggant)
+
+digital signature (*2):
+- 32-bit PE file containing good v1 Taggant and digital signature								(should pass v1)
+- 32-bit PE file containing good v2 Taggant and digital signature								(should pass v2)
+- 32-bit PE file containing good v2 Taggant and good v1 Taggant and digital signature						(should pass v2 and pass v1)
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and digital signature					(should pass v2(a) and pass v2(b))
+- 32-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and digital signature			(should pass v2(a) and pass v2(b) and pass v1)
+
+- 64-bit PE file containing good v1 Taggant and digital signature								(should pass v1)
+- 64-bit PE file containing good v2 Taggant and digital signature								(should pass v2)
+- 64-bit PE file containing good v2 Taggant and good v1 Taggant and digital signature						(should pass v2 and pass v1)
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and digital signature					(should pass v2(a) and pass v2(b))
+- 64-bit PE file containing good v2(a) Taggant and good v2(b) Taggant and good v1 Taggant and digital signature			(should pass v2(a) and pass v2(b) and pass v1)
+
+ExtraBlob:
+- extracted data from 32-bit ExtraBlob matches what was added									(should pass)
+- extracted data from 64-bit ExtraBlob matches what was added									(should pass)
+
+JS:
+- JS file containing good v2 Taggant and good image										(should pass v2)
+- JS file containing good v2(a) Taggant and good v2(b) Taggant and good image							(should pass v2(a) and pass v2(b))
+- 32-bit PE file containing textual Taggant 											(should pass)
+- 64-bit PE file containing textual Taggant 											(should pass)
+- JS file containing good v2 Taggant and unexpected appended data								(should fail - no Taggant)
+- JS file containing good v2 Taggant and digital signature									(should pass v2)
+- JS file containing good v2(a) Taggant and good v2(b) Taggant and digital signature						(should	pass v2(a) and pass v2(b))
+
+sandwich:
+- 32-bit PE file containing binary v2(a) Taggant and textual (b) Taggant							(should pass v2(a) and fail (b))
+- 64-bit PE file containing binary v2(a) Taggant and textual (b) Taggant							(should pass v2(a) and fail (b))
+
+*1 - overlay is defined as any bytes, other than a v2 Taggant or digital signature, that exist beyond the non-zero value that was specified by the uFileEnd parameter of the TaggantComputeHashes() function.
+*2 - the validity of the digital signature is not checked, only that the Taggant can be located in the presence of the DS.
