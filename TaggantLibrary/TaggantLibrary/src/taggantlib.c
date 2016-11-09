@@ -251,14 +251,14 @@ EXPORT UNSIGNED32 STDCALL TaggantGetTaggant(__in PTAGGANTCONTEXT pCtx, __in PFIL
                     }
                     /* go through all taggants to get the end of full file hash */
                     ffhend = fileend;
-                    while (taggant2_read_textual(pCtx, hFile, ffhend, &taggant2, TAGGANT_JSFILE, JS_COMMENT_BEGIN, strlen(JS_COMMENT_BEGIN), JS_COMMENT_END, strlen(JS_COMMENT_END)) == TNOERR)
+                    while (taggant2_read_textual(pCtx, hFile, ffhend, &taggant2, TAGGANT_JSFILE, JS_COMMENT_BEGIN, (int) strlen(JS_COMMENT_BEGIN), JS_COMMENT_END, (int) strlen(JS_COMMENT_END)) == TNOERR)
                     {
                         ffhend -= strlen(JS_COMMENT_BEGIN) + taggant2->Header.TaggantLength + strlen(JS_COMMENT_END);
                         /* Free the taggant object */
                         taggant2_free_taggant(taggant2);
                     }
                 }
-                res = taggant2_read_textual(pCtx, hFile, fileend, &taggant->pTag2, TAGGANT_JSFILE, JS_COMMENT_BEGIN, strlen(JS_COMMENT_BEGIN), JS_COMMENT_END, strlen(JS_COMMENT_END));
+                res = taggant2_read_textual(pCtx, hFile, fileend, &taggant->pTag2, TAGGANT_JSFILE, JS_COMMENT_BEGIN, (int) strlen(JS_COMMENT_BEGIN), JS_COMMENT_END, (int) strlen(JS_COMMENT_END));
                 if (res == TNOERR)
                 {
                     taggant->pTag2->fileend = fileend - (strlen(JS_COMMENT_BEGIN) + taggant->pTag2->Header.TaggantLength + strlen(JS_COMMENT_END));
@@ -507,7 +507,7 @@ EXPORT UNSIGNED32 STDCALL TaggantComputeHashes(__in PTAGGANTCONTEXT pCtx, __inou
             */
             res = TNOERR;
             found = 0;
-            while (res == TNOERR && taggant2_read_textual(pCtx, hFile, fileend, &taggant2, TAGGANT_JSFILE, JS_COMMENT_BEGIN, strlen(JS_COMMENT_BEGIN), JS_COMMENT_END, strlen(JS_COMMENT_END)) == TNOERR)
+            while (res == TNOERR && taggant2_read_textual(pCtx, hFile, fileend, &taggant2, TAGGANT_JSFILE, JS_COMMENT_BEGIN, (int) strlen(JS_COMMENT_BEGIN), JS_COMMENT_END, (int) strlen(JS_COMMENT_END)) == TNOERR)
             {
                 fileend -= strlen(JS_COMMENT_BEGIN) + taggant2->Header.TaggantLength + strlen(JS_COMMENT_END);
                 /* Get the offset and size of the first found taggant to add it into hashmap */
@@ -1180,18 +1180,20 @@ EXPORT __success(return > 0) UNSIGNED16 STDCALL TaggantGetHashMapDoubles(__in PT
         switch (get_lib_version(pTaggantObj))
         {
         case TAGGANT_LIBRARY_VERSION1:			
-            if (pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.Entries)
+            if (pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.Entries
+             && ((pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.DoublesOffset + (pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.Entries * sizeof(HASHBLOB_HASHMAP_DOUBLE))) <= pTaggantObj->tagObj1->pTagBlob->Header.Length))
             {
                 *pDoubles = (PHASHBLOB_HASHMAP_DOUBLE)((char*)pTaggantObj->tagObj1->pTagBlob + pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.DoublesOffset);
+                res = pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.Entries;
             }
-            res = pTaggantObj->tagObj1->pTagBlob->Hash.Hashmap.Entries;
             break;
         case TAGGANT_LIBRARY_VERSION2:			
-            if (pTaggantObj->tagObj2->tagBlob.Hash.Hashmap.Entries)
+            if (pTaggantObj->tagObj2->tagBlob.Hash.Hashmap.Entries
+             && ((pTaggantObj->tagObj2->tagBlob.Hash.Hashmap.DoublesOffset + (pTaggantObj->tagObj2->tagBlob.Hash.Hashmap.Entries * sizeof(HASHBLOB_HASHMAP_DOUBLE))) <= pTaggantObj->tagObj2->tagBlob.Header.Length))
             {
                 *pDoubles = pTaggantObj->tagObj2->tagBlob.pHashMapDoubles;
+                res = pTaggantObj->tagObj2->tagBlob.Hash.Hashmap.Entries;
             }
-            res = pTaggantObj->tagObj2->tagBlob.Hash.Hashmap.Entries;
             break;
         }
     }

@@ -745,13 +745,11 @@ UNSIGNED32 get_cms_size(CMS_ContentInfo *cms)
 UNSIGNED32 taggant_validate_signature(PTAGGANTOBJ1 pTaggantObj, PTAGGANT1 pTaggant, PVOID pRootCert)
 {
     UNSIGNED32 res = TBADKEY;
-    X509_STORE *store = NULL;
-    X509_STORE_CTX *csc = NULL;
     BIO *cmsbio = NULL;
     BIO *signedbio = NULL;
     BIO *tsbio = NULL;
     STACK_OF(X509)* certs = NULL;
-    X509 *root = NULL, *cer1 = NULL, *cer2 = NULL;
+    X509 *root = NULL, *cer1 = NULL, *cer2 = NULL, *spv = NULL, *user = NULL;
     char *buf = NULL, *tmpbuf;
     int biolength = 0;
     int tagsize;
@@ -792,33 +790,42 @@ UNSIGNED32 taggant_validate_signature(PTAGGANTOBJ1 pTaggantObj, PTAGGANT1 pTagga
                                         /* There should be 2 certificates only: CA, SPV and USER */
                                         if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
                                         {
+                                            EVP_PKEY *rootpub;
+
                                             cer1 = sk_X509_value(certs, 0);
                                             cer2 = sk_X509_value(certs, 1);
-                                            csc = X509_STORE_CTX_new();
-                                            if (csc)
+                                            /* Check if the certificates chain is correct  */
+                                            rootpub = X509_get_pubkey(root);
+                                            if (rootpub)
                                             {
-                                                store = X509_STORE_new();
-                                                if (store)
+                                                /* Verify the first certificate against root public key */
+                                                if (X509_verify(cer1, rootpub) == 1)
                                                 {
-                                                    if (X509_STORE_add_cert(store, root))
-                                                    {
-                                                        if (X509_STORE_add_cert(store, cer1))
-                                                        {
-                                                            X509_STORE_CTX_init(csc, store, cer2, NULL);
-                                                            /* Set own function to check certificates chain
-                                                               We can't use standard one, because it also checks expiration date of each certificate
-                                                               Expiration date does not matter in our case and we do redefinition of this function */
-                                                            X509_STORE_set_verify_func(csc, verify_certificates_chain);
-                                                            /* Verify chain */
-                                                            if (X509_verify_cert(csc) > 0)
-                                                            {
-                                                                res = TNOERR;
-                                                            }
-                                                        }
-                                                    }
-                                                    X509_STORE_free(store);
+                                                    spv = X509_dup(cer1);
+                                                    user = X509_dup(cer2);
                                                 }
-                                                X509_STORE_CTX_free(csc);
+                                                else
+                                                {
+                                                    /* Verify the second certificate against root public key */
+                                                    if (X509_verify(cer2, rootpub) == 1)
+                                                    {
+                                                        spv = X509_dup(cer2);
+                                                        user = X509_dup(cer1);
+                                                    }
+                                                }
+                                                /* Verify user certificate against spv public key */
+                                                if (spv && user)
+                                                {
+                                                    EVP_PKEY *spvpub;
+
+                                                    spvpub = X509_get_pubkey(spv);
+                                                    if (X509_verify(user, spvpub) == 1)
+                                                    {
+                                                        res = TNOERR;
+                                                    }
+                                                    EVP_PKEY_free(spvpub);
+                                                }
+                                                EVP_PKEY_free(rootpub);
                                             }
                                         }
                                         sk_X509_pop_free(certs, X509_free);
@@ -1019,6 +1026,11 @@ UNSIGNED32 taggant_validate_hashmap(PTAGGANTCONTEXT pCtx, PTAGGANTOBJ1 pTaggantO
     PTAGGANTBLOB ptmpb = NULL;
     PHASHBLOB_HASHMAP_DOUBLE hmd;
     int i;
+
+    if ((pTaggantObj->pTagBlob->Hash.Hashmap.DoublesOffset + (pTaggantObj->pTagBlob->Hash.Hashmap.Entries * sizeof(HASHBLOB_HASHMAP_DOUBLE))) > pTaggantObj->pTagBlob->Header.Length)
+    {
+        return TMEMORY;
+    }
 
     /* Allocate a copy of taggant blob */
     ptmpb = (PTAGGANTBLOB)memory_alloc(pTaggantObj->pTagBlob->Header.Length);

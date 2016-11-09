@@ -235,7 +235,7 @@ int http_read(const char *hostName, const void *requestString, int requestLength
                     r_end = strstr(r_start, "\r\n");
                     if (r_end && r_end > r_start)
                     {
-                        *resultBufferLength = r_end - r_start;
+                        *resultBufferLength = (int) (r_end - r_start);
                         *resultBuffer = memory_alloc(*resultBufferLength + 1);
                         if (!*resultBuffer)
                         {
