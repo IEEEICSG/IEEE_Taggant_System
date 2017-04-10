@@ -126,10 +126,10 @@ int MAIN(int argc, char **argv)
         NULL, *wbio = NULL;
 #define PROG_NAME_SIZE  39
     char pname[PROG_NAME_SIZE + 1];
-#ifndef OPENSSL_NO_ENGINE
     char *engine = NULL;
-#endif
+    ENGINE *e = NULL;
     const EVP_MD *dgst = NULL;
+    int non_fips_allow = 0;
 
     apps_startup();
 
@@ -265,8 +265,10 @@ int MAIN(int argc, char **argv)
             if (--argc < 1)
                 goto bad;
             md = *(++argv);
-        } else if ((argv[0][0] == '-') &&
-                   ((c = EVP_get_cipherbyname(&(argv[0][1]))) != NULL)) {
+        } else if (strcmp(*argv, "-non-fips-allow") == 0)
+            non_fips_allow = 1;
+        else if ((argv[0][0] == '-') &&
+                 ((c = EVP_get_cipherbyname(&(argv[0][1]))) != NULL)) {
             cipher = c;
         } else if (strcmp(*argv, "-none") == 0)
             cipher = NULL;
@@ -319,9 +321,19 @@ int MAIN(int argc, char **argv)
         argv++;
     }
 
-#ifndef OPENSSL_NO_ENGINE
-    setup_engine(bio_err, engine, 0);
-#endif
+    e = setup_engine(bio_err, engine, 0);
+
+    if (cipher && EVP_CIPHER_flags(cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) {
+        BIO_printf(bio_err,
+                   "AEAD ciphers not supported by the enc utility\n");
+        goto end;
+    }
+
+    if (cipher && (EVP_CIPHER_mode(cipher) == EVP_CIPH_XTS_MODE)) {
+        BIO_printf(bio_err,
+                   "Ciphers in XTS mode are not supported by the enc utility\n");
+        goto end;
+    }
 
     if (md && (dgst = EVP_get_digestbyname(md)) == NULL) {
         BIO_printf(bio_err, "%s is an unsupported message digest type\n", md);
@@ -494,7 +506,7 @@ int MAIN(int argc, char **argv)
                             BIO_printf(bio_err, "invalid hex salt value\n");
                             goto end;
                         }
-                    } else if (RAND_pseudo_bytes(salt, sizeof salt) < 0)
+                    } else if (RAND_bytes(salt, sizeof salt) <= 0)
                         goto end;
                     /*
                      * If -P option then don't bother writing
@@ -533,9 +545,14 @@ int MAIN(int argc, char **argv)
             else
                 OPENSSL_cleanse(str, strlen(str));
         }
-        if ((hiv != NULL) && !set_hex(hiv, iv, sizeof iv)) {
-            BIO_printf(bio_err, "invalid hex iv value\n");
-            goto end;
+        if (hiv != NULL) {
+            int siz = EVP_CIPHER_iv_length(cipher);
+            if (siz == 0) {
+                BIO_printf(bio_err, "warning: iv not use by this cipher\n");
+            } else if (!set_hex(hiv, iv, sizeof iv)) {
+                BIO_printf(bio_err, "invalid hex iv value\n");
+                goto end;
+            }
         }
         if ((hiv == NULL) && (str == NULL)
             && EVP_CIPHER_iv_length(cipher) != 0) {
@@ -547,7 +564,7 @@ int MAIN(int argc, char **argv)
             BIO_printf(bio_err, "iv undefined\n");
             goto end;
         }
-        if ((hkey != NULL) && !set_hex(hkey, key, sizeof key)) {
+        if ((hkey != NULL) && !set_hex(hkey, key, EVP_CIPHER_key_length(cipher))) {
             BIO_printf(bio_err, "invalid hex key value\n");
             goto end;
         }
@@ -561,6 +578,10 @@ int MAIN(int argc, char **argv)
          */
 
         BIO_get_cipher_ctx(benc, &ctx);
+
+        if (non_fips_allow)
+            EVP_CIPHER_CTX_set_flags(ctx, EVP_CIPH_FLAG_NON_FIPS_ALLOW);
+
         if (!EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL, enc)) {
             BIO_printf(bio_err, "Error setting cipher %s\n",
                        EVP_CIPHER_name(cipher));
@@ -650,6 +671,7 @@ int MAIN(int argc, char **argv)
     if (bzl != NULL)
         BIO_free(bzl);
 #endif
+    release_engine(e);
     if (pass)
         OPENSSL_free(pass);
     apps_shutdown();

@@ -13,6 +13,9 @@
 #include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/asn1.h>
+#ifndef OPENSSL_NO_CMS
+# include <openssl/cms.h>
+#endif
 #include "gost_params.h"
 #include "gost_lcl.h"
 #include "e_gost_err.h"
@@ -112,7 +115,10 @@ static int decode_gost_algor_params(EVP_PKEY *pkey, X509_ALGOR *palg)
     }
     param_nid = OBJ_obj2nid(gkp->key_params);
     GOST_KEY_PARAMS_free(gkp);
-    EVP_PKEY_set_type(pkey, pkey_nid);
+    if(!EVP_PKEY_set_type(pkey, pkey_nid)) {
+        GOSTerr(GOST_F_DECODE_GOST_ALGOR_PARAMS, ERR_R_INTERNAL_ERROR);
+        return 0;
+    }
     switch (pkey_nid) {
     case NID_id_GostR3410_94:
         {
@@ -221,6 +227,22 @@ static int pkey_ctrl_gost(EVP_PKEY *pkey, int op, long arg1, void *arg2)
             X509_ALGOR_set0(alg2, OBJ_nid2obj(nid), V_ASN1_NULL, 0);
         }
         return 1;
+#ifndef OPENSSL_NO_CMS
+    case ASN1_PKEY_CTRL_CMS_SIGN:
+        if (arg1 == 0) {
+            X509_ALGOR *alg1 = NULL, *alg2 = NULL;
+            int nid = EVP_PKEY_base_id(pkey);
+            CMS_SignerInfo_get0_algs((CMS_SignerInfo *)arg2,
+                                     NULL, NULL, &alg1, &alg2);
+            X509_ALGOR_set0(alg1, OBJ_nid2obj(NID_id_GostR3411_94),
+                            V_ASN1_NULL, 0);
+            if (nid == NID_undef) {
+                return (-1);
+            }
+            X509_ALGOR_set0(alg2, OBJ_nid2obj(nid), V_ASN1_NULL, 0);
+        }
+        return 1;
+#endif
     case ASN1_PKEY_CTRL_PKCS7_ENCRYPT:
         if (arg1 == 0) {
             X509_ALGOR *alg;
@@ -233,6 +255,21 @@ static int pkey_ctrl_gost(EVP_PKEY *pkey, int op, long arg1, void *arg2)
                             V_ASN1_SEQUENCE, params);
         }
         return 1;
+#ifndef OPENSSL_NO_CMS
+    case ASN1_PKEY_CTRL_CMS_ENVELOPE:
+        if (arg1 == 0) {
+            X509_ALGOR *alg = NULL;
+            ASN1_STRING *params = encode_gost_algor_params(pkey);
+            if (!params) {
+                return -1;
+            }
+            CMS_RecipientInfo_ktri_get0_algs((CMS_RecipientInfo *)arg2, NULL,
+                                             NULL, &alg);
+            X509_ALGOR_set0(alg, OBJ_nid2obj(pkey->type), V_ASN1_SEQUENCE,
+                            params);
+        }
+        return 1;
+#endif
     case ASN1_PKEY_CTRL_DEFAULT_MD_NID:
         *(int *)arg2 = NID_id_GostR3411_94;
         return 2;
@@ -518,9 +555,19 @@ static int param_copy_gost01(EVP_PKEY *to, const EVP_PKEY *from)
     }
     if (!eto) {
         eto = EC_KEY_new();
-        EVP_PKEY_assign(to, EVP_PKEY_base_id(from), eto);
+        if(!eto) {
+            GOSTerr(GOST_F_PARAM_COPY_GOST01, ERR_R_MALLOC_FAILURE);
+            return 0;
+        }
+        if(!EVP_PKEY_assign(to, EVP_PKEY_base_id(from), eto)) {
+            GOSTerr(GOST_F_PARAM_COPY_GOST01, ERR_R_INTERNAL_ERROR);
+            return 0;
+        }
     }
-    EC_KEY_set_group(eto, EC_KEY_get0_group(efrom));
+    if(!EC_KEY_set_group(eto, EC_KEY_get0_group(efrom))) {
+        GOSTerr(GOST_F_PARAM_COPY_GOST01, ERR_R_INTERNAL_ERROR);
+        return 0;
+    }
     if (EC_KEY_get0_private_key(eto)) {
         gost2001_compute_public(eto);
     }
@@ -570,6 +617,10 @@ static int pub_decode_gost94(EVP_PKEY *pk, X509_PUBKEY *pub)
         return 0;
     }
     databuf = OPENSSL_malloc(octet->length);
+    if (databuf == NULL) {
+        GOSTerr(GOST_F_PUB_DECODE_GOST94, ERR_R_MALLOC_FAILURE);
+        return 0;
+    }
     for (i = 0, j = octet->length - 1; i < octet->length; i++, j--) {
         databuf[j] = octet->data[i];
     }
@@ -599,6 +650,8 @@ static int pub_encode_gost94(X509_PUBKEY *pub, const EVP_PKEY *pk)
     }
     data_len = BN_num_bytes(dsa->pub_key);
     databuf = OPENSSL_malloc(data_len);
+    if (databuf == NULL)
+        return 0;
     BN_bn2bin(dsa->pub_key, databuf);
     octet = ASN1_OCTET_STRING_new();
     ASN1_STRING_set(octet, NULL, data_len);
@@ -639,6 +692,10 @@ static int pub_decode_gost01(EVP_PKEY *pk, X509_PUBKEY *pub)
         return 0;
     }
     databuf = OPENSSL_malloc(octet->length);
+    if (databuf == NULL) {
+        GOSTerr(GOST_F_PUB_DECODE_GOST01, ERR_R_MALLOC_FAILURE);
+        return 0;
+    }
     for (i = 0, j = octet->length - 1; i < octet->length; i++, j--) {
         databuf[j] = octet->data[i];
     }
@@ -695,11 +752,28 @@ static int pub_encode_gost01(X509_PUBKEY *pub, const EVP_PKEY *pk)
     }
     X = BN_new();
     Y = BN_new();
-    EC_POINT_get_affine_coordinates_GFp(EC_KEY_get0_group(ec),
-                                        pub_key, X, Y, NULL);
+    if(!X || !Y) {
+        GOSTerr(GOST_F_PUB_ENCODE_GOST01, ERR_R_MALLOC_FAILURE);
+        if(X) BN_free(X);
+        if(Y) BN_free(Y);
+        BN_free(order);
+        return 0;
+    }
+    if(!EC_POINT_get_affine_coordinates_GFp(EC_KEY_get0_group(ec),
+                                        pub_key, X, Y, NULL)) {
+        GOSTerr(GOST_F_PUB_ENCODE_GOST01, ERR_R_INTERNAL_ERROR);
+        BN_free(X);
+        BN_free(Y);
+        BN_free(order);
+        return 0;
+    }
     data_len = 2 * BN_num_bytes(order);
     BN_free(order);
     databuf = OPENSSL_malloc(data_len);
+    if (databuf == NULL) {
+        GOSTerr(GOST_F_PUB_ENCODE_GOST01, ERR_R_MALLOC_FAILURE);
+        return 0;
+    }
     memset(databuf, 0, data_len);
 
     store_bignum(X, databuf + data_len / 2, data_len / 2);

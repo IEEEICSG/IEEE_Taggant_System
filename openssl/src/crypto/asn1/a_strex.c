@@ -337,7 +337,7 @@ static const signed char tag2nbyte[] = {
     -1, -1, -1, -1, -1,         /* 5-9 */
     -1, -1, 0, -1,              /* 10-13 */
     -1, -1, -1, -1,             /* 15-17 */
-    -1, 1, 1,                   /* 18-20 */
+    1, 1, 1,                    /* 18-20 */
     -1, 1, 1, 1,                /* 21-24 */
     -1, 1, -1,                  /* 25-27 */
     4, -1, 2                    /* 28-30 */
@@ -638,6 +638,7 @@ int ASN1_STRING_to_UTF8(unsigned char **out, ASN1_STRING *in)
     mbflag |= MBSTRING_FLAG;
     stmp.data = NULL;
     stmp.length = 0;
+    stmp.flags = 0;
     ret =
         ASN1_mbstring_copy(&str, in->data, in->length, mbflag,
                            B_ASN1_UTF8STRING);

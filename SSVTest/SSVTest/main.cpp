@@ -527,7 +527,6 @@ void process_taggant(PTAGGANTCONTEXT pCtx, ifstream *pfin, PPE_ALL_HEADERS ppeh,
                 cout << " - User Certificate\n";
                 print_tag_info(tag_obj, EUSERCERT);
             }
-
         }
         else
         {

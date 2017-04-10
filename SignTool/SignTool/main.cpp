@@ -194,7 +194,7 @@ int main(int argc, char *argv[], char *envp[])
     }
 
     if (!silent) cout << "SignTool Application (adds Taggant v2 to files)\n\n";
-    const char* usage = "Usage: signtool.exe [-silent] <file_to_sign> <license.pem> [optional] -t:<type> -csa -r:<root.crt>\n\n-t:<type> - type of the file to sign (pe/js/txt/bin)\n-csa - enables CSA Mode\n-r:<root.crt> - root certificate for CSA Mode\n\n";
+    const char* usage = "Usage: signtool.exe [-silent] <file_to_sign> <license.pem> [optional] -t:<type> -csa -r:<root.crt> -s:<timestamp server url>\n\n-t:<type> - type of the file to sign (pe/js/txt/bin)\n-csa - enables CSA Mode\n-r:<root.crt> - root certificate for CSA Mode\n-s:<timestamp server url> - url to the timestamp server (default: http://taggant-tsa.ieee.org/)\n\n";
 
 	// Check if number of arguments is not less than 2
 	if (argc < 2)
@@ -213,6 +213,7 @@ int main(int argc, char *argv[], char *envp[])
     int csamode = 0;
     char *rootfile = NULL;
     char *root = NULL;
+    char *tsurl = NULL;
 	if (argc >= 3)
 	{
         for (int i = 3; i < argc; i++)
@@ -220,34 +221,37 @@ int main(int argc, char *argv[], char *envp[])
             if (stricmp(argv[i], "-csa") == 0)
             {
                 csamode = 1;
-            } else
-                if (strnicmp(argv[i], "-r:", 3) == 0)
+            } else if (strnicmp(argv[i], "-r:", 3) == 0)
+            {
+                int len = strlen(argv[i]) - 3 + 1;
+                rootfile = new char[len];
+                memset(rootfile, 0, len);
+                strcpy(rootfile, argv[i] + 3);
+            }
+            else if (strnicmp(argv[i], "-t:", 3) == 0)
+            {
+                char type[4];
+                memset(&type, 0, sizeof(type));
+                strncpy((char*)&type, argv[i] + 3, strlen(argv[i]) > 6 ? 3 : strlen(argv[i]) - 3);
+                // Determine the type
+                if (stricmp((char*)&type, "js") == 0)
                 {
-                    int len = strlen(argv[i]) - 3 + 1;
-                    rootfile = new char[len];
-                    memset(rootfile, 0, len);
-                    strcpy(rootfile, argv[i] + 3);
+                    filetype = TAGGANT_JSFILE;
+                } else if (stricmp((char*)&type, "txt") == 0)
+                {
+                    filetype = TAGGANT_TXTFILE;
+                } else if (stricmp((char*)&type, "bin") == 0)
+                {
+                    filetype = TAGGANT_BINFILE;
                 }
-                else
-                    if (strnicmp(argv[i], "-t:", 3) == 0)
-                    {
-                        char type[4];
-                        memset(&type, 0, sizeof(type));
-                        strncpy((char*)&type, argv[i] + 3, strlen(argv[i]) > 6 ? 3 : strlen(argv[i]) - 3);
-                        // Determine the type
-                        if (stricmp((char*)&type, "js") == 0)
-                        {
-                            filetype = TAGGANT_JSFILE;
-                        } else
-                            if (stricmp((char*)&type, "txt") == 0)
-                            {
-                                filetype = TAGGANT_TXTFILE;
-                            } else
-                                if (stricmp((char*)&type, "bin") == 0)
-                                {
-                                    filetype = TAGGANT_BINFILE;
-                                }
-                    }
+            }
+            else if (strnicmp(argv[i], "-s:", 3) == 0)
+            {
+                int len = strlen(argv[i]) - 3 + 1;
+                tsurl = new char[len];
+                memset(tsurl, 0, len);
+                strcpy(tsurl, argv[i] + 3);
+            }
         }
 	}
 
@@ -510,7 +514,7 @@ int main(int argc, char *argv[], char *envp[])
                                             {
                                                 // try to put timestamp
                                                 if (!silent) cout << "Put timestamp\n";
-                                                UNSIGNED32 timestampres = pSPVTaggantPutTimestamp(tagobj, "http://taggant-tsa.ieee.org/", 50);
+                                                UNSIGNED32 timestampres = pSPVTaggantPutTimestamp(tagobj, tsurl ? tsurl : "http://taggant-tsa.ieee.org/", 50);
                                                 if (!silent)
                                                 {
                                                     switch (timestampres)
@@ -624,5 +628,6 @@ int main(int argc, char *argv[], char *envp[])
         }
         ffs.close();
     }
+    delete[] tsurl;
 	return err;
 }

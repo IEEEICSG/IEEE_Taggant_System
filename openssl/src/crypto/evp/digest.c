@@ -117,6 +117,11 @@
 # include <openssl/engine.h>
 #endif
 
+#ifdef OPENSSL_FIPS
+# include <openssl/fips.h>
+# include "evp_locl.h"
+#endif
+
 void EVP_MD_CTX_init(EVP_MD_CTX *ctx)
 {
     memset(ctx, '\0', sizeof *ctx);
@@ -141,6 +146,17 @@ int EVP_DigestInit(EVP_MD_CTX *ctx, const EVP_MD *type)
 int EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)
 {
     EVP_MD_CTX_clear_flags(ctx, EVP_MD_CTX_FLAG_CLEANED);
+#ifdef OPENSSL_FIPS
+    /* If FIPS mode switch to approved implementation if possible */
+    if (FIPS_mode()) {
+        const EVP_MD *fipsmd;
+        if (type) {
+            fipsmd = evp_get_fips_md(type);
+            if (fipsmd)
+                type = fipsmd;
+        }
+    }
+#endif
 #ifndef OPENSSL_NO_ENGINE
     /*
      * Whether it's nice or not, "Inits" can be used on "Final"'d contexts so
@@ -187,14 +203,19 @@ int EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)
             ctx->engine = impl;
         } else
             ctx->engine = NULL;
-    } else if (!ctx->digest) {
-        EVPerr(EVP_F_EVP_DIGESTINIT_EX, EVP_R_NO_DIGEST_SET);
-        return 0;
+    } else {
+        if (!ctx->digest) {
+            EVPerr(EVP_F_EVP_DIGESTINIT_EX, EVP_R_NO_DIGEST_SET);
+            return 0;
+        }
+        type = ctx->digest;
     }
 #endif
     if (ctx->digest != type) {
-        if (ctx->digest && ctx->digest->ctx_size)
+        if (ctx->digest && ctx->digest->ctx_size) {
             OPENSSL_free(ctx->md_data);
+            ctx->md_data = NULL;
+        }
         ctx->digest = type;
         if (!(ctx->flags & EVP_MD_CTX_FLAG_NO_INIT) && type->ctx_size) {
             ctx->update = type->update;
@@ -217,11 +238,24 @@ int EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)
     }
     if (ctx->flags & EVP_MD_CTX_FLAG_NO_INIT)
         return 1;
+#ifdef OPENSSL_FIPS
+    if (FIPS_mode()) {
+        if (FIPS_digestinit(ctx, type))
+            return 1;
+        OPENSSL_free(ctx->md_data);
+        ctx->md_data = NULL;
+        return 0;
+    }
+#endif
     return ctx->digest->init(ctx);
 }
 
 int EVP_DigestUpdate(EVP_MD_CTX *ctx, const void *data, size_t count)
 {
+#ifdef OPENSSL_FIPS
+    if (FIPS_mode())
+        return FIPS_digestupdate(ctx, data, count);
+#endif
     return ctx->update(ctx, data, count);
 }
 
@@ -238,6 +272,10 @@ int EVP_DigestFinal(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *size)
 int EVP_DigestFinal_ex(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *size)
 {
     int ret;
+#ifdef OPENSSL_FIPS
+    if (FIPS_mode())
+        return FIPS_digestfinal(ctx, md, size);
+#endif
 
     OPENSSL_assert(ctx->digest->md_size <= EVP_MAX_MD_SIZE);
     ret = ctx->digest->final(ctx, md);
@@ -247,7 +285,7 @@ int EVP_DigestFinal_ex(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *size)
         ctx->digest->cleanup(ctx);
         EVP_MD_CTX_set_flags(ctx, EVP_MD_CTX_FLAG_CLEANED);
     }
-    memset(ctx->md_data, 0, ctx->digest->ctx_size);
+    OPENSSL_cleanse(ctx->md_data, ctx->digest->ctx_size);
     return ret;
 }
 
@@ -337,6 +375,7 @@ void EVP_MD_CTX_destroy(EVP_MD_CTX *ctx)
 /* This call frees resources associated with the context */
 int EVP_MD_CTX_cleanup(EVP_MD_CTX *ctx)
 {
+#ifndef OPENSSL_FIPS
     /*
      * Don't assume ctx->md_data was cleaned in EVP_Digest_Final, because
      * sometimes only copies of the context are ever finalised.
@@ -349,6 +388,7 @@ int EVP_MD_CTX_cleanup(EVP_MD_CTX *ctx)
         OPENSSL_cleanse(ctx->md_data, ctx->digest->ctx_size);
         OPENSSL_free(ctx->md_data);
     }
+#endif
     if (ctx->pctx)
         EVP_PKEY_CTX_free(ctx->pctx);
 #ifndef OPENSSL_NO_ENGINE
@@ -358,6 +398,9 @@ int EVP_MD_CTX_cleanup(EVP_MD_CTX *ctx)
          * reference we held for this reason.
          */
         ENGINE_finish(ctx->engine);
+#endif
+#ifdef OPENSSL_FIPS
+    FIPS_md_ctx_cleanup(ctx);
 #endif
     memset(ctx, '\0', sizeof *ctx);
 

@@ -106,23 +106,23 @@ static DSA_METHOD openssl_dsa_meth = {
 #define DSA_MOD_EXP(err_instr,dsa,rr,a1,p1,a2,p2,m,ctx,in_mont) \
         do { \
         int _tmp_res53; \
-        if((dsa)->meth->dsa_mod_exp) \
+        if ((dsa)->meth->dsa_mod_exp) \
                 _tmp_res53 = (dsa)->meth->dsa_mod_exp((dsa), (rr), (a1), (p1), \
                                 (a2), (p2), (m), (ctx), (in_mont)); \
         else \
                 _tmp_res53 = BN_mod_exp2_mont((rr), (a1), (p1), (a2), (p2), \
                                 (m), (ctx), (in_mont)); \
-        if(!_tmp_res53) err_instr; \
+        if (!_tmp_res53) err_instr; \
         } while(0)
 #define DSA_BN_MOD_EXP(err_instr,dsa,r,a,p,m,ctx,m_ctx) \
         do { \
         int _tmp_res53; \
-        if((dsa)->meth->bn_mod_exp) \
+        if ((dsa)->meth->bn_mod_exp) \
                 _tmp_res53 = (dsa)->meth->bn_mod_exp((dsa), (r), (a), (p), \
                                 (m), (ctx), (m_ctx)); \
         else \
                 _tmp_res53 = BN_mod_exp_mont((r), (a), (p), (m), (ctx), (m_ctx)); \
-        if(!_tmp_res53) err_instr; \
+        if (!_tmp_res53) err_instr; \
         } while(0)
 
 const DSA_METHOD *DSA_OpenSSL(void)
@@ -138,6 +138,7 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     BN_CTX *ctx = NULL;
     int reason = ERR_R_BN_LIB;
     DSA_SIG *ret = NULL;
+    int noredo = 0;
 
     BN_init(&m);
     BN_init(&xr);
@@ -153,7 +154,7 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     ctx = BN_CTX_new();
     if (ctx == NULL)
         goto err;
-
+ redo:
     if ((dsa->kinv == NULL) || (dsa->r == NULL)) {
         if (!DSA_sign_setup(dsa, ctx, &kinv, &r))
             goto err;
@@ -162,6 +163,7 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
         dsa->kinv = NULL;
         r = dsa->r;
         dsa->r = NULL;
+        noredo = 1;
     }
 
     if (dlen > BN_num_bytes(dsa->q))
@@ -185,6 +187,17 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     if (!BN_mod_mul(s, s, kinv, dsa->q, ctx))
         goto err;
 
+    /*
+     * Redo if r or s is zero as required by FIPS 186-3: this is very
+     * unlikely.
+     */
+    if (BN_is_zero(r) || BN_is_zero(s)) {
+        if (noredo) {
+            reason = DSA_R_NEED_NEW_SETUP_VALUES;
+            goto err;
+        }
+        goto redo;
+    }
     ret = DSA_SIG_new();
     if (ret == NULL)
         goto err;
@@ -192,7 +205,7 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     ret->s = s;
 
  err:
-    if (!ret) {
+    if (ret == NULL) {
         DSAerr(DSA_F_DSA_DO_SIGN, reason);
         BN_free(r);
         BN_free(s);
@@ -234,10 +247,12 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in, BIGNUM **kinvp,
     do
         if (!BN_rand_range(&k, dsa->q))
             goto err;
-    while (BN_is_zero(&k)) ;
+    while (BN_is_zero(&k));
+
     if ((dsa->flags & DSA_FLAG_NO_EXP_CONSTTIME) == 0) {
         BN_set_flags(&k, BN_FLG_CONSTTIME);
     }
+
 
     if (dsa->flags & DSA_FLAG_CACHE_MONT_P) {
         if (!BN_MONT_CTX_set_locked(&dsa->method_mont_p,
@@ -250,6 +265,8 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in, BIGNUM **kinvp,
     if ((dsa->flags & DSA_FLAG_NO_EXP_CONSTTIME) == 0) {
         if (!BN_copy(&kq, &k))
             goto err;
+
+        BN_set_flags(&kq, BN_FLG_CONSTTIME);
 
         /*
          * We do not want timing information to leak the length of k, so we
@@ -269,6 +286,7 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in, BIGNUM **kinvp,
     } else {
         K = &k;
     }
+
     DSA_BN_MOD_EXP(goto err, dsa, r, dsa->g, K, dsa->p, ctx,
                    dsa->method_mont_p);
     if (!BN_mod(r, r, dsa->q, ctx))
@@ -385,11 +403,7 @@ static int dsa_do_verify(const unsigned char *dgst, int dgst_len,
     ret = (BN_ucmp(&u1, sig->r) == 0);
 
  err:
-    /*
-     * XXX: surely this is wrong - if ret is 0, it just didn't verify; there
-     * is no error in BN. Test should be ret == -1 (Ben)
-     */
-    if (ret != 1)
+    if (ret < 0)
         DSAerr(DSA_F_DSA_DO_VERIFY, ERR_R_BN_LIB);
     if (ctx != NULL)
         BN_CTX_free(ctx);

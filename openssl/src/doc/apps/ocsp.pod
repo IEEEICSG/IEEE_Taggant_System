@@ -26,9 +26,11 @@ B<openssl> B<ocsp>
 [B<-no_nonce>]
 [B<-url URL>]
 [B<-host host:n>]
+[B<-header name value>]
 [B<-path>]
 [B<-CApath dir>]
 [B<-CAfile file>]
+[B<-no_alt_chains>]
 [B<-VAfile file>]
 [B<-validity_period n>]
 [B<-status_age n>]
@@ -134,6 +136,14 @@ if the B<host> option is present then the OCSP request is sent to the host
 B<hostname> on port B<port>. B<path> specifies the HTTP path name to use
 or "/" by default.
 
+=item B<-header name value>
+
+If sending a request to an OCSP server, then the specified header name and
+value are added to the HTTP request.  Note that the B<name> and B<value> must
+be specified as two separate parameters, not as a single quoted string, and
+that the header name does not have the trailing colon.
+Some OCSP responders require a Host header; use this flag to provide it.
+
 =item B<-timeout seconds>
 
 connection timeout to the OCSP responder in seconds
@@ -142,6 +152,10 @@ connection timeout to the OCSP responder in seconds
 
 file or pathname containing trusted CA certificates. These are used to verify
 the signature on the OCSP response.
+
+=item B<-no_alt_chains>
+
+See L<B<verify>|verify(1)> manual page for details.
 
 =item B<-verify_other file>
 
@@ -379,3 +393,9 @@ second file.
 
  openssl ocsp -index demoCA/index.txt -rsigner rcert.pem -CA demoCA/cacert.pem
      -reqin req.der -respout resp.der
+
+=head1 HISTORY
+
+The -no_alt_chains options was first added to OpenSSL 1.0.2b.
+
+=cut

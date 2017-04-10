@@ -60,6 +60,7 @@
 #ifndef OPENSSL_NO_HMAC
 # include <stdio.h>
 # include "cryptlib.h"
+# include <openssl/crypto.h>
 # include <openssl/hmac.h>
 # include <openssl/rand.h>
 # include <openssl/pkcs12.h>
@@ -98,10 +99,13 @@ int PKCS12_gen_mac(PKCS12 *p12, const char *pass, int passlen,
         return 0;
     }
     HMAC_CTX_init(&hmac);
-    HMAC_Init_ex(&hmac, key, md_size, md_type, NULL);
-    HMAC_Update(&hmac, p12->authsafes->d.data->data,
-                p12->authsafes->d.data->length);
-    HMAC_Final(&hmac, mac, maclen);
+    if (!HMAC_Init_ex(&hmac, key, md_size, md_type, NULL)
+        || !HMAC_Update(&hmac, p12->authsafes->d.data->data,
+                        p12->authsafes->d.data->length)
+        || !HMAC_Final(&hmac, mac, maclen)) {
+        HMAC_CTX_cleanup(&hmac);
+        return 0;
+    }
     HMAC_CTX_cleanup(&hmac);
     return 1;
 }
@@ -120,7 +124,7 @@ int PKCS12_verify_mac(PKCS12 *p12, const char *pass, int passlen)
         return 0;
     }
     if ((maclen != (unsigned int)p12->mac->dinfo->digest->length)
-        || memcmp(mac, p12->mac->dinfo->digest->data, maclen))
+        || CRYPTO_memcmp(mac, p12->mac->dinfo->digest->data, maclen))
         return 0;
     return 1;
 }
@@ -169,13 +173,13 @@ int PKCS12_setup_mac(PKCS12 *p12, int iter, unsigned char *salt, int saltlen,
     }
     if (!saltlen)
         saltlen = PKCS12_SALT_LEN;
-    p12->mac->salt->length = saltlen;
-    if (!(p12->mac->salt->data = OPENSSL_malloc(saltlen))) {
+    if ((p12->mac->salt->data = OPENSSL_malloc(saltlen)) == NULL) {
         PKCS12err(PKCS12_F_PKCS12_SETUP_MAC, ERR_R_MALLOC_FAILURE);
         return 0;
     }
+    p12->mac->salt->length = saltlen;
     if (!salt) {
-        if (RAND_pseudo_bytes(p12->mac->salt->data, saltlen) < 0)
+        if (RAND_bytes(p12->mac->salt->data, saltlen) <= 0)
             return 0;
     } else
         memcpy(p12->mac->salt->data, salt, saltlen);

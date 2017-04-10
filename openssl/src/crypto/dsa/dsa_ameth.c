@@ -129,21 +129,23 @@ static int dsa_pub_decode(EVP_PKEY *pkey, X509_PUBKEY *pubkey)
 static int dsa_pub_encode(X509_PUBKEY *pk, const EVP_PKEY *pkey)
 {
     DSA *dsa;
-    void *pval = NULL;
     int ptype;
     unsigned char *penc = NULL;
     int penclen;
+    ASN1_STRING *str = NULL;
 
     dsa = pkey->pkey.dsa;
     if (pkey->save_parameters && dsa->p && dsa->q && dsa->g) {
-        ASN1_STRING *str;
         str = ASN1_STRING_new();
+        if (!str) {
+            DSAerr(DSA_F_DSA_PUB_ENCODE, ERR_R_MALLOC_FAILURE);
+            goto err;
+        }
         str->length = i2d_DSAparams(dsa, &str->data);
         if (str->length <= 0) {
             DSAerr(DSA_F_DSA_PUB_ENCODE, ERR_R_MALLOC_FAILURE);
             goto err;
         }
-        pval = str;
         ptype = V_ASN1_SEQUENCE;
     } else
         ptype = V_ASN1_UNDEF;
@@ -158,14 +160,14 @@ static int dsa_pub_encode(X509_PUBKEY *pk, const EVP_PKEY *pkey)
     }
 
     if (X509_PUBKEY_set0_param(pk, OBJ_nid2obj(EVP_PKEY_DSA),
-                               ptype, pval, penc, penclen))
+                               ptype, str, penc, penclen))
         return 1;
 
  err:
     if (penc)
         OPENSSL_free(penc);
-    if (pval)
-        ASN1_STRING_free(pval);
+    if (str)
+        ASN1_STRING_free(str);
 
     return 0;
 }
@@ -188,6 +190,8 @@ static int dsa_priv_decode(EVP_PKEY *pkey, PKCS8_PRIV_KEY_INFO *p8)
 
     STACK_OF(ASN1_TYPE) *ndsa = NULL;
     DSA *dsa = NULL;
+
+    int ret = 0;
 
     if (!PKCS8_pkey_get0(NULL, &p, &pklen, &palg, p8))
         return 0;
@@ -260,23 +264,21 @@ static int dsa_priv_decode(EVP_PKEY *pkey, PKCS8_PRIV_KEY_INFO *p8)
     }
 
     EVP_PKEY_assign_DSA(pkey, dsa);
+
+    ret = 1;
+    goto done;
+
+ decerr:
+    DSAerr(DSA_F_DSA_PRIV_DECODE, DSA_R_DECODE_ERROR);
+ dsaerr:
+    DSA_free(dsa);
+ done:
     BN_CTX_free(ctx);
     if (ndsa)
         sk_ASN1_TYPE_pop_free(ndsa, ASN1_TYPE_free);
     else
         ASN1_STRING_clear_free(privkey);
-
-    return 1;
-
- decerr:
-    DSAerr(DSA_F_DSA_PRIV_DECODE, EVP_R_DECODE_ERROR);
- dsaerr:
-    BN_CTX_free(ctx);
-    if (privkey)
-        ASN1_STRING_clear_free(privkey);
-    sk_ASN1_TYPE_pop_free(ndsa, ASN1_TYPE_free);
-    DSA_free(dsa);
-    return 0;
+    return ret;
 }
 
 static int dsa_priv_encode(PKCS8_PRIV_KEY_INFO *p8, const EVP_PKEY *pkey)
@@ -316,6 +318,7 @@ static int dsa_priv_encode(PKCS8_PRIV_KEY_INFO *p8, const EVP_PKEY *pkey)
     dplen = i2d_ASN1_INTEGER(prkey, &dp);
 
     ASN1_STRING_clear_free(prkey);
+    prkey = NULL;
 
     if (!PKCS8_pkey_set0(p8, OBJ_nid2obj(NID_dsa), 0,
                          V_ASN1_SEQUENCE, params, dp, dplen))
@@ -347,7 +350,7 @@ static int dsa_missing_parameters(const EVP_PKEY *pkey)
 {
     DSA *dsa;
     dsa = pkey->pkey.dsa;
-    if ((dsa->p == NULL) || (dsa->q == NULL) || (dsa->g == NULL))
+    if (dsa == NULL || dsa->p == NULL || dsa->q == NULL || dsa->g == NULL)
         return 1;
     return 0;
 }
@@ -523,6 +526,48 @@ static int old_dsa_priv_encode(const EVP_PKEY *pkey, unsigned char **pder)
     return i2d_DSAPrivateKey(pkey->pkey.dsa, pder);
 }
 
+static int dsa_sig_print(BIO *bp, const X509_ALGOR *sigalg,
+                         const ASN1_STRING *sig, int indent, ASN1_PCTX *pctx)
+{
+    DSA_SIG *dsa_sig;
+    const unsigned char *p;
+    if (!sig) {
+        if (BIO_puts(bp, "\n") <= 0)
+            return 0;
+        else
+            return 1;
+    }
+    p = sig->data;
+    dsa_sig = d2i_DSA_SIG(NULL, &p, sig->length);
+    if (dsa_sig) {
+        int rv = 0;
+        size_t buf_len = 0;
+        unsigned char *m = NULL;
+        update_buflen(dsa_sig->r, &buf_len);
+        update_buflen(dsa_sig->s, &buf_len);
+        m = OPENSSL_malloc(buf_len + 10);
+        if (m == NULL) {
+            DSAerr(DSA_F_DSA_SIG_PRINT, ERR_R_MALLOC_FAILURE);
+            goto err;
+        }
+
+        if (BIO_write(bp, "\n", 1) != 1)
+            goto err;
+
+        if (!ASN1_bn_print(bp, "r:   ", dsa_sig->r, m, indent))
+            goto err;
+        if (!ASN1_bn_print(bp, "s:   ", dsa_sig->s, m, indent))
+            goto err;
+        rv = 1;
+ err:
+        if (m)
+            OPENSSL_free(m);
+        DSA_SIG_free(dsa_sig);
+        return rv;
+    }
+    return X509_signature_dump(bp, sig, indent);
+}
+
 static int dsa_pkey_ctrl(EVP_PKEY *pkey, int op, long arg1, void *arg2)
 {
     switch (op) {
@@ -557,10 +602,14 @@ static int dsa_pkey_ctrl(EVP_PKEY *pkey, int op, long arg1, void *arg2)
             X509_ALGOR_set0(alg2, OBJ_nid2obj(snid), V_ASN1_UNDEF, 0);
         }
         return 1;
+
+    case ASN1_PKEY_CTRL_CMS_RI_TYPE:
+        *(int *)arg2 = CMS_RECIPINFO_NONE;
+        return 1;
 #endif
 
     case ASN1_PKEY_CTRL_DEFAULT_MD_NID:
-        *(int *)arg2 = NID_sha1;
+        *(int *)arg2 = NID_sha256;
         return 2;
 
     default:
@@ -620,6 +669,7 @@ const EVP_PKEY_ASN1_METHOD dsa_asn1_meths[] = {
      dsa_copy_parameters,
      dsa_cmp_parameters,
      dsa_param_print,
+     dsa_sig_print,
 
      int_dsa_free,
      dsa_pkey_ctrl,

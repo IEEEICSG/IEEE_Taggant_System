@@ -71,8 +71,8 @@
 #include "callbacks.h"
 #include "endianness.h"
 #include "taggant_types.h"
-#include "verify_helper.h"
 #include "timestamp.h"
+#include "verify_helper.h"
 #include <openssl/sha.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -748,18 +748,21 @@ UNSIGNED32 taggant_validate_signature(PTAGGANTOBJ1 pTaggantObj, PTAGGANT1 pTagga
     BIO *cmsbio = NULL;
     BIO *signedbio = NULL;
     BIO *tsbio = NULL;
-    STACK_OF(X509)* certs = NULL;
-    X509 *root = NULL, *cer1 = NULL, *cer2 = NULL, *spv = NULL, *user = NULL;
+    X509_STORE *trusted_store = NULL;
+    X509_VERIFY_PARAM *vpm = NULL;
     char *buf = NULL, *tmpbuf;
     int biolength = 0;
     int tagsize;
-    int maxlen = MAX_INTEGER;
+    X509* tmpcer;
+    STACK_OF(X509) *cms_certs = NULL;
+    int maxlen = MAX_INTEGER, err;
+    EVP_PKEY *pkey;
 
     res = TBADKEY;
 
     /* Load root certificate */
-    root = buffer_to_X509(pRootCert);
-    if (root)
+    pTaggantObj->root = buffer_to_X509(pRootCert);
+    if (pTaggantObj->root)
     {
         /* Compare taggant version */
         if (pTaggant->Header.Version == TAGGANT_VERSION1 && pTaggant->Header.CMSLength > 0)
@@ -780,106 +783,123 @@ UNSIGNED32 taggant_validate_signature(PTAGGANTOBJ1 pTaggantObj, PTAGGANT1 pTagga
                             signedbio = BIO_new(BIO_s_mem());
                             if (signedbio)
                             {
-                                /* Verify CMS, but do not verify signer certificates */
-                                if (CMS_verify(pTaggantObj->CMS, NULL, NULL, NULL, signedbio, CMS_NO_SIGNER_CERT_VERIFY | CMS_BINARY))
+                                /* Create a store with trusted certificates */
+                                trusted_store = X509_STORE_new();
+                                if (trusted_store)
                                 {
-                                    /* Check signer certificates */
-                                    certs = CMS_get1_certs(pTaggantObj->CMS);
-                                    if (certs)
+                                    /* Add root certificate to the trusted store */
+                                    if (X509_STORE_add_cert(trusted_store, pTaggantObj->root))
                                     {
-                                        /* There should be 2 certificates only: CA, SPV and USER */
-                                        if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
+                                        vpm = X509_VERIFY_PARAM_new();
+                                        if (vpm)
                                         {
-                                            EVP_PKEY *rootpub;
-
-                                            cer1 = sk_X509_value(certs, 0);
-                                            cer2 = sk_X509_value(certs, 1);
-                                            /* Check if the certificates chain is correct  */
-                                            rootpub = X509_get_pubkey(root);
-                                            if (rootpub)
+                                            /* We have to set the purpose to "any" to be used for signing certificate
+                                            CMS_Verify expects that signer certificate has the purpose "smimeencrypt"
+                                            but it does not.
+                                            */
+                                            X509_VERIFY_PARAM_set_purpose(vpm, X509_PURPOSE_ANY);
+                                            X509_STORE_set1_param(trusted_store, vpm);
+                                            /* Set the custom cb function to suppress certificate time errors */
+                                            X509_STORE_set_verify_cb(trusted_store, verify_cms_cb);
+                                            if (CMS_verify(pTaggantObj->CMS, NULL, trusted_store, NULL, signedbio, CMS_BINARY))
                                             {
-                                                /* Verify the first certificate against root public key */
-                                                if (X509_verify(cer1, rootpub) == 1)
+                                                /* Make sure there are 2 certificate in CMS */
+                                                cms_certs = CMS_get1_certs(pTaggantObj->CMS);
+                                                if (cms_certs)
                                                 {
-                                                    spv = X509_dup(cer1);
-                                                    user = X509_dup(cer2);
-                                                }
-                                                else
-                                                {
-                                                    /* Verify the second certificate against root public key */
-                                                    if (X509_verify(cer2, rootpub) == 1)
+                                                    if (sk_X509_num(cms_certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
                                                     {
-                                                        spv = X509_dup(cer2);
-                                                        user = X509_dup(cer1);
-                                                    }
-                                                }
-                                                /* Verify user certificate against spv public key */
-                                                if (spv && user)
-                                                {
-                                                    EVP_PKEY *spvpub;
-
-                                                    spvpub = X509_get_pubkey(spv);
-                                                    if (X509_verify(user, spvpub) == 1)
-                                                    {
-                                                        res = TNOERR;
-                                                    }
-                                                    EVP_PKEY_free(spvpub);
-                                                }
-                                                EVP_PKEY_free(rootpub);
-                                            }
-                                        }
-                                        sk_X509_pop_free(certs, X509_free);
-                                    }
-                                    
-                                    if (res == TNOERR)
-                                    {
-                                        res = TMEMORY;
-                                        /* get size of the signed data */
-                                        biolength = BIO_read(signedbio, NULL, maxlen);
-                                        buf = (char*)memory_alloc(biolength);
-                                        if (buf)
-                                        {
-                                            BIO_read(signedbio, buf, biolength);
-                                            /* Check if buffer has enough size for taggant blob */
-                                            if (biolength >= sizeof(TAGGANTBLOB))
-                                            {
-                                                tagsize = ((PTAGGANTBLOB)buf)->Header.Length;
-                                                if (IS_BIG_ENDIAN)
-                                                {
-                                                    tagsize = UNSIGNED16_to_big_endian((char*)&tagsize);
-                                                }
-                                                if (biolength >= tagsize)
-                                                {
-                                                    tmpbuf = memory_realloc(pTaggantObj->pTagBlob, tagsize);
-                                                    if (tmpbuf)
-                                                    {
-                                                        pTaggantObj->pTagBlob = (PTAGGANTBLOB)tmpbuf;
-                                                        memcpy((char*)pTaggantObj->pTagBlob, buf, tagsize);
-                                                        if (IS_BIG_ENDIAN)
+                                                        /* Set the spv and user certificates, check first certificate against second one */
+                                                        pTaggantObj->spv = X509_dup(sk_X509_value(cms_certs, 0));
+                                                        pTaggantObj->user = X509_dup(sk_X509_value(cms_certs, 1));
+                                                        pkey = X509_get_pubkey(pTaggantObj->spv);
+                                                        if (pkey)
                                                         {
-                                                            TAGGANTBLOB_to_big_endian(pTaggantObj->pTagBlob, pTaggantObj->pTagBlob);
-                                                        }
-                                                        /* check if the timestamp response exists in the taggant */
-                                                        if ((biolength - (int)pTaggantObj->pTagBlob->Header.Length) > 0)
-                                                        {
-                                                            /* load TS response, better to use d2i_TS_RESP instead of d2i_TS_RESP_bio */
-                                                            tsbio = BIO_new(BIO_s_mem());
-                                                            if (tsbio)
+                                                            if (!X509_verify(pTaggantObj->user, pkey))
                                                             {
-                                                                BIO_write(tsbio, buf + pTaggantObj->pTagBlob->Header.Length, biolength - pTaggantObj->pTagBlob->Header.Length);
-                                                                pTaggantObj->TSResponse = d2i_TS_RESP_bio(tsbio, NULL);
-
-                                                                BIO_free(tsbio);
+                                                                tmpcer = pTaggantObj->user;
+                                                                pTaggantObj->user = pTaggantObj->spv;
+                                                                pTaggantObj->spv = tmpcer;
                                                             }
+                                                            EVP_PKEY_free(pkey);
                                                         }
-                                                        res = TNOERR;
+                                                        /* CMS is OK, next try to read a timestamp */
+                                                        res = TMEMORY;
+                                                        /* get size of the signed data */
+                                                        biolength = BIO_read(signedbio, NULL, maxlen);
+                                                        buf = (char*)memory_alloc(biolength);
+                                                        if (buf)
+                                                        {
+                                                            BIO_read(signedbio, buf, biolength);
+                                                            /* Check if buffer has enough size for taggant blob */
+                                                            if (biolength >= sizeof(TAGGANTBLOB))
+                                                            {
+                                                                tagsize = ((PTAGGANTBLOB)buf)->Header.Length;
+                                                                if (IS_BIG_ENDIAN)
+                                                                {
+                                                                    tagsize = UNSIGNED16_to_big_endian((char*)&tagsize);
+                                                                }
+                                                                if (biolength >= tagsize)
+                                                                {
+                                                                    tmpbuf = memory_realloc(pTaggantObj->pTagBlob, tagsize);
+                                                                    if (tmpbuf)
+                                                                    {
+                                                                        pTaggantObj->pTagBlob = (PTAGGANTBLOB)tmpbuf;
+                                                                        memcpy((char*)pTaggantObj->pTagBlob, buf, tagsize);
+                                                                        if (IS_BIG_ENDIAN)
+                                                                        {
+                                                                            TAGGANTBLOB_to_big_endian(pTaggantObj->pTagBlob, pTaggantObj->pTagBlob);
+                                                                        }
+
+                                                                        /* check if the hasmap doubles offset is correct */
+                                                                        err = 0;
+                                                                        if (pTaggantObj->pTagBlob->Hash.Hashmap.Entries)
+                                                                        {
+                                                                            if (pTaggantObj->pTagBlob->Hash.Hashmap.DoublesOffset != sizeof(TAGGANTBLOB))
+                                                                            {
+                                                                                err = 1;
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                /* Make sure TAGGANTBLOB fits add hashmap doubles */
+                                                                                if (pTaggantObj->pTagBlob->Header.Length != sizeof(TAGGANTBLOB) + pTaggantObj->pTagBlob->Hash.Hashmap.Entries * sizeof(HASHBLOB_HASHMAP_DOUBLE))
+                                                                                {
+                                                                                    err = 1;
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        if (!err)
+                                                                        {
+                                                                            /* check if the timestamp response exists in the taggant */
+                                                                            if ((biolength - (int)pTaggantObj->pTagBlob->Header.Length) > 0)
+                                                                            {
+                                                                                /* load TS response, better to use d2i_TS_RESP instead of d2i_TS_RESP_bio */
+                                                                                tsbio = BIO_new(BIO_s_mem());
+                                                                                if (tsbio)
+                                                                                {
+                                                                                    BIO_write(tsbio, buf + pTaggantObj->pTagBlob->Header.Length, biolength - pTaggantObj->pTagBlob->Header.Length);
+                                                                                    pTaggantObj->TSResponse = d2i_TS_RESP_bio(tsbio, NULL);
+
+                                                                                    BIO_free(tsbio);
+                                                                                }
+                                                                            }
+                                                                            res = TNOERR;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            /* free memory buffer */
+                                                            memory_free(buf);
+                                                        }
                                                     }
+                                                    sk_X509_pop_free(cms_certs, X509_free);
                                                 }
                                             }
-                                            /* free memory buffer */
-                                            memory_free(buf);
+                                            X509_VERIFY_PARAM_free(vpm);
                                         }
                                     }
+                                    X509_STORE_free(trusted_store);
                                 }
                                 BIO_free(signedbio);
                             }
@@ -889,7 +909,6 @@ UNSIGNED32 taggant_validate_signature(PTAGGANTOBJ1 pTaggantObj, PTAGGANT1 pTagga
                 BIO_free(cmsbio);
             }
         }
-        X509_free(root);
     }
 
     if (res != TNOERR)
@@ -1177,13 +1196,9 @@ UNSIGNED32 taggant_get_timestamp(PTAGGANTOBJ1 pTaggantObj, UNSIGNED64 *pTime, PV
 UNSIGNED32 taggant_get_info(PTAGGANTOBJ1 pTaggantObj, ENUMTAGINFO eKey, UNSIGNED32 *pSize, PINFO pInfo)
 {
     UNSIGNED32 res = TERRORKEY;
-    STACK_OF(X509) *certs = NULL, *signers = NULL;
-    int i = 0, brk = 0, biolength = 0;
+    int biolength = 0;
     BIO *tmpbio = NULL;
-    X509 *tmpcert = NULL, *signer = NULL;
     int maxlen = MAX_INTEGER;
-    ASN1_INTEGER *signerser = NULL, *tmpser = NULL;
-    BIGNUM *signerbn = NULL, *tmpbn = NULL;
 
     if (pTaggantObj->CMS == NULL || pTaggantObj->pTagBlob == NULL)
     {
@@ -1206,130 +1221,72 @@ UNSIGNED32 taggant_get_info(PTAGGANTOBJ1 pTaggantObj, ENUMTAGINFO eKey, UNSIGNED
         break;
     case ESPVCERT:
         res = TERROR;
-        /* Get signer certificate */
-        signers = CMS_get0_signers(pTaggantObj->CMS);
-        if (signers)
+        if (pTaggantObj->spv)
         {
-            /* Make sure there is 1 certificate */
-            if (sk_X509_num(signers) == 1)
+            tmpbio = BIO_new(BIO_s_mem());
+            if (tmpbio)
             {
-                signer = sk_X509_value(signers, 0);
-                if (signer)
+                if (i2d_X509_bio(tmpbio, pTaggantObj->spv))
                 {
-                    signerser = X509_get_serialNumber(signer);
-                    if (signerser)
+                    /* Get bio size */
+                    maxlen = MAX_INTEGER;
+                    biolength = BIO_read(tmpbio, NULL, maxlen);
+                    if (biolength >= 0)
                     {
-                        signerbn = ASN1_INTEGER_to_BN(signerser, NULL);
-                        if (signerbn)
+                        /* Make sure input buffer is enough to store BIO data */
+                        if (*pSize >= (UNSIGNED32)biolength && pInfo != NULL)
                         {
-                            /* Get all certificates in CMS */
-                            certs = CMS_get1_certs(pTaggantObj->CMS);
-                            if (certs)
-                            {
-                                /* Make sure there are 2 certificates in the CMS chain */
-                                if (sk_X509_num(certs) == CERTIFICATES_IN_TAGGANT_CHAIN)
-                                {
-                                    for (i = 0; i < CERTIFICATES_IN_TAGGANT_CHAIN; i++)
-                                    {
-                                        tmpcert = sk_X509_value(certs, i);
-                                        if (tmpcert)
-                                        {
-                                            tmpser = X509_get_serialNumber(tmpcert);
-                                            if (tmpser)
-                                            {
-                                                tmpbn = ASN1_INTEGER_to_BN(tmpser, NULL);
-                                                if (tmpbn)
-                                                {
-                                                    if (BN_cmp(signerbn, tmpbn) != 0)
-                                                    {
-                                                        tmpbio = BIO_new(BIO_s_mem());
-                                                        if (tmpbio)
-                                                        {
-                                                            if (i2d_X509_bio(tmpbio, tmpcert))
-                                                            {
-                                                                /* Get bio size */
-                                                                maxlen = MAX_INTEGER;
-                                                                biolength = BIO_read(tmpbio, NULL, maxlen);
-                                                                if (biolength >= 0)
-                                                                {
-                                                                    /* Make sure input buffer is enough to store BIO data */
-                                                                    if (*pSize >= (UNSIGNED32)biolength && pInfo != NULL)
-                                                                    {
-                                                                        BIO_read(tmpbio, pInfo, biolength);
-                                                                        res = TNOERR;
-                                                                    } else
-                                                                    {
-                                                                        res = TINSUFFICIENTBUFFER;
-                                                                    }
-                                                                    *pSize = (UNSIGNED32)biolength;
-                                                                }
-                                                            }
-                                                            BIO_free(tmpbio);
-                                                        }
-                                                        else
-                                                        {
-                                                            res = TMEMORY;
-                                                        }
-                                                        brk = 1;
-                                                    }
-                                                    BN_free(tmpbn);
-                                                    if (brk)
-                                                    {
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                sk_X509_pop_free(certs, X509_free);
-                            }
-                            BN_free(signerbn);
+                            BIO_read(tmpbio, pInfo, biolength);
+                            res = TNOERR;
                         }
+                        else
+                        {
+                            res = TINSUFFICIENTBUFFER;
+                        }
+                        *pSize = (UNSIGNED32)biolength;
                     }
                 }
+                BIO_free(tmpbio);
             }
-            sk_X509_free(signers);			
+            else
+            {
+                res = TMEMORY;
+            }
         }
         break;
     case EUSERCERT:	
         res = TERROR;
-        signers = CMS_get0_signers(pTaggantObj->CMS);
-        if (signers)
+        if (pTaggantObj->user)
         {
-            /* Make sure there is 1 certificate */
-            if (sk_X509_num(signers) == 1)
+            tmpbio = BIO_new(BIO_s_mem());
+            if (tmpbio)
             {
-                signer = sk_X509_value(signers, 0);
-                if (signer)
+                if (i2d_X509_bio(tmpbio, pTaggantObj->user))
                 {
-                    tmpbio = BIO_new(BIO_s_mem());
-                    if (tmpbio)
+                    /* Get bio size */
+                    maxlen = MAX_INTEGER;
+                    biolength = BIO_read(tmpbio, NULL, maxlen);
+                    if (biolength >= 0)
                     {
-                        if (i2d_X509_bio(tmpbio, signer))
+                        /* Make sure input buffer is enough to store BIO data */
+                        if (*pSize >= (UNSIGNED32)biolength && pInfo != NULL)
                         {
-                            /* Get bio size */
-                            maxlen = MAX_INTEGER;
-                            biolength = BIO_read(tmpbio, NULL, maxlen);
-                            if (biolength >= 0)
-                            {
-                                /* Make sure input buffer is enough to store BIO data */
-                                if (*pSize >= (UNSIGNED32)biolength && pInfo != NULL)
-                                {
-                                    BIO_read(tmpbio, pInfo, biolength);
-                                    res = TNOERR;
-                                } else
-                                {
-                                    res = TINSUFFICIENTBUFFER;
-                                }
-                                *pSize = (UNSIGNED32)biolength;
-                            }
+                            BIO_read(tmpbio, pInfo, biolength);
+                            res = TNOERR;
                         }
-                        BIO_free(tmpbio);
+                        else
+                        {
+                            res = TINSUFFICIENTBUFFER;
+                        }
+                        *pSize = (UNSIGNED32)biolength;
                     }
                 }
+                BIO_free(tmpbio);
             }
-            sk_X509_free(signers);
+            else
+            {
+                res = TMEMORY;
+            }
         }
         break;
     case EFILEEND:
@@ -1537,5 +1494,23 @@ void taggant_free_taggantobj_content(PTAGGANTOBJ1 pTaggantObj)
     {
         TS_RESP_free(pTaggantObj->TSResponse);
         pTaggantObj->TSResponse = NULL;
+    }
+    /* Free user certificate*/
+    if (pTaggantObj->user)
+    {
+        X509_free(pTaggantObj->user);
+        pTaggantObj->user = NULL;
+    }
+    /* Free spv certificate*/
+    if (pTaggantObj->spv)
+    {
+        X509_free(pTaggantObj->spv);
+        pTaggantObj->spv = NULL;
+    }
+    /* Free root certificate*/
+    if (pTaggantObj->root)
+    {
+        X509_free(pTaggantObj->root);
+        pTaggantObj->root = NULL;
     }
 }

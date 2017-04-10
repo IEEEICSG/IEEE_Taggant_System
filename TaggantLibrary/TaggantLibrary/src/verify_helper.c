@@ -67,105 +67,21 @@
 
 #include "global.h"
 #include <string.h>
+
 #include <openssl/x509.h>
-#include <openssl/objects.h>
-#include <openssl/ts.h>
-#include <openssl/err.h>
-#include <openssl/pkcs7.h>
+#include <openssl/cms.h>
 
-
-/* This function is copied from openssl x509_vfy.c. It checks certificates chain.
-   We customized this function and eliminated check of certificates date */
-
-int verify_certificates_chain(X509_STORE_CTX *ctx)
+int verify_cms_cb(int ok, X509_STORE_CTX *ctx)
 {
-    int ok=0,n;
-    X509 *xs,*xi;
-    EVP_PKEY *pkey=NULL;
-    int (*cb)(int xok,X509_STORE_CTX *xctx);
+    int error = X509_STORE_CTX_get_error(ctx);
 
-    cb=ctx->verify_cb;
-
-    n=sk_X509_num(ctx->chain);
-    ctx->error_depth=n-1;
-    n--;
-    xi=sk_X509_value(ctx->chain,n);
-
-    if (ctx->check_issued(ctx, xi, xi))
-        xs=xi;
-    else
+    // Skip certificate time errors
+    if (error == X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD ||
+        error == X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD ||
+        error == X509_V_ERR_CERT_NOT_YET_VALID ||
+        error == X509_V_ERR_CERT_HAS_EXPIRED)
     {
-        if (n <= 0)
-        {
-            ctx->error=X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE;
-            ctx->current_cert=xi;
-            ok=cb(0,ctx);
-            goto end;
-        }
-        else
-        {
-            n--;
-            ctx->error_depth=n;
-            xs=sk_X509_value(ctx->chain,n);
-        }
+        return 1;
     }
-
-/*	ctx->error=0;  not needed */
-    while (n >= 0)
-    {
-        ctx->error_depth=n;
-
-        /* Skip signature check for self signed certificates unless
-         * explicitly asked for. It doesn't add any security and
-         * just wastes time.
-         */
-        if (!xs->valid && (xs != xi || (ctx->param->flags & X509_V_FLAG_CHECK_SS_SIGNATURE)))
-        {
-            if ((pkey=X509_get_pubkey(xi)) == NULL)
-            {
-                ctx->error=X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY;
-                ctx->current_cert=xi;
-                ok=(*cb)(0,ctx);
-                if (!ok) goto end;
-            }
-            else if (X509_verify(xs,pkey) <= 0)
-            {
-                ctx->error=X509_V_ERR_CERT_SIGNATURE_FAILURE;
-                ctx->current_cert=xs;
-                ok=(*cb)(0,ctx);
-                if (!ok)
-                {
-                    EVP_PKEY_free(pkey);
-                    goto end;
-                }
-            }
-            EVP_PKEY_free(pkey);
-            pkey=NULL;
-        }
-
-        xs->valid = 1;
-
-        /* Do not check the time
-        ok = check_cert_time(ctx, xs);
-        if (!ok)
-            goto end;
-        */
-
-        /* The last error (if any) is still in the error value */
-        ctx->current_issuer=xi;
-        ctx->current_cert=xs;
-        ok=(*cb)(1,ctx);
-        if (!ok) goto end;
-
-        n--;
-        if (n >= 0)
-        {
-            xi=xs;
-            xs=sk_X509_value(ctx->chain,n);
-        }
-    }
-    ok=1;
-end:
     return ok;
 }
-

@@ -59,6 +59,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <openssl/crypto.h>
 #include <openssl/des.h>
 #include <openssl/mdc2.h>
 
@@ -75,7 +76,7 @@
                         *((c)++)=(unsigned char)(((l)>>24L)&0xff))
 
 static void mdc2_body(MDC2_CTX *c, const unsigned char *in, size_t len);
-int MDC2_Init(MDC2_CTX *c)
+fips_md_init(MDC2)
 {
     c->num = 0;
     c->pad_type = 1;
@@ -90,7 +91,7 @@ int MDC2_Update(MDC2_CTX *c, const unsigned char *in, size_t len)
 
     i = c->num;
     if (i != 0) {
-        if (i + len < MDC2_BLOCK) {
+        if (len < MDC2_BLOCK - i) {
             /* partial block */
             memcpy(&(c->data[i]), in, len);
             c->num += (int)len;

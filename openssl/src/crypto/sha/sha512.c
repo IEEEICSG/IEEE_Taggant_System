@@ -55,33 +55,13 @@ const char SHA512_version[] = "SHA-512" OPENSSL_VERSION_PTEXT;
 # if defined(__i386) || defined(__i386__) || defined(_M_IX86) || \
     defined(__x86_64) || defined(_M_AMD64) || defined(_M_X64) || \
     defined(__s390__) || defined(__s390x__) || \
+    defined(__aarch64__) || \
     defined(SHA512_ASM)
 #  define SHA512_BLOCK_CAN_MANAGE_UNALIGNED_DATA
 # endif
 
-int SHA384_Init(SHA512_CTX *c)
+fips_md_init_ctx(SHA384, SHA512)
 {
-# if defined(SHA512_ASM) && (defined(__arm__) || defined(__arm))
-    /* maintain dword order required by assembler module */
-    unsigned int *h = (unsigned int *)c->h;
-
-    h[0] = 0xcbbb9d5d;
-    h[1] = 0xc1059ed8;
-    h[2] = 0x629a292a;
-    h[3] = 0x367cd507;
-    h[4] = 0x9159015a;
-    h[5] = 0x3070dd17;
-    h[6] = 0x152fecd8;
-    h[7] = 0xf70e5939;
-    h[8] = 0x67332667;
-    h[9] = 0xffc00b31;
-    h[10] = 0x8eb44a87;
-    h[11] = 0x68581511;
-    h[12] = 0xdb0c2e0d;
-    h[13] = 0x64f98fa7;
-    h[14] = 0x47b5481d;
-    h[15] = 0xbefa4fa4;
-# else
     c->h[0] = U64(0xcbbb9d5dc1059ed8);
     c->h[1] = U64(0x629a292a367cd507);
     c->h[2] = U64(0x9159015a3070dd17);
@@ -90,7 +70,7 @@ int SHA384_Init(SHA512_CTX *c)
     c->h[5] = U64(0x8eb44a8768581511);
     c->h[6] = U64(0xdb0c2e0d64f98fa7);
     c->h[7] = U64(0x47b5481dbefa4fa4);
-# endif
+
     c->Nl = 0;
     c->Nh = 0;
     c->num = 0;
@@ -98,29 +78,8 @@ int SHA384_Init(SHA512_CTX *c)
     return 1;
 }
 
-int SHA512_Init(SHA512_CTX *c)
+fips_md_init(SHA512)
 {
-# if defined(SHA512_ASM) && (defined(__arm__) || defined(__arm))
-    /* maintain dword order required by assembler module */
-    unsigned int *h = (unsigned int *)c->h;
-
-    h[0] = 0x6a09e667;
-    h[1] = 0xf3bcc908;
-    h[2] = 0xbb67ae85;
-    h[3] = 0x84caa73b;
-    h[4] = 0x3c6ef372;
-    h[5] = 0xfe94f82b;
-    h[6] = 0xa54ff53a;
-    h[7] = 0x5f1d36f1;
-    h[8] = 0x510e527f;
-    h[9] = 0xade682d1;
-    h[10] = 0x9b05688c;
-    h[11] = 0x2b3e6c1f;
-    h[12] = 0x1f83d9ab;
-    h[13] = 0xfb41bd6b;
-    h[14] = 0x5be0cd19;
-    h[15] = 0x137e2179;
-# else
     c->h[0] = U64(0x6a09e667f3bcc908);
     c->h[1] = U64(0xbb67ae8584caa73b);
     c->h[2] = U64(0x3c6ef372fe94f82b);
@@ -129,7 +88,7 @@ int SHA512_Init(SHA512_CTX *c)
     c->h[5] = U64(0x9b05688c2b3e6c1f);
     c->h[6] = U64(0x1f83d9abfb41bd6b);
     c->h[7] = U64(0x5be0cd19137e2179);
-# endif
+
     c->Nl = 0;
     c->Nh = 0;
     c->num = 0;
@@ -181,22 +140,6 @@ int SHA512_Final(unsigned char *md, SHA512_CTX *c)
     if (md == 0)
         return 0;
 
-# if defined(SHA512_ASM) && (defined(__arm__) || defined(__arm))
-    /* recall assembler dword order... */
-    n = c->md_len;
-    if (n == SHA384_DIGEST_LENGTH || n == SHA512_DIGEST_LENGTH) {
-        unsigned int *h = (unsigned int *)c->h, t;
-
-        for (n /= 4; n; n--) {
-            t = *(h++);
-            *(md++) = (unsigned char)(t >> 24);
-            *(md++) = (unsigned char)(t >> 16);
-            *(md++) = (unsigned char)(t >> 8);
-            *(md++) = (unsigned char)(t);
-        }
-    } else
-        return 0;
-# else
     switch (c->md_len) {
         /* Let compiler decide if it's appropriate to unroll... */
     case SHA384_DIGEST_LENGTH:
@@ -231,7 +174,7 @@ int SHA512_Final(unsigned char *md, SHA512_CTX *c)
     default:
         return 0;
     }
-# endif
+
     return 1;
 }
 
@@ -295,6 +238,10 @@ int SHA384_Update(SHA512_CTX *c, const void *data, size_t len)
 
 void SHA512_Transform(SHA512_CTX *c, const unsigned char *data)
 {
+# ifndef SHA512_BLOCK_CAN_MANAGE_UNALIGNED_DATA
+    if ((size_t)data % sizeof(c->u.d[0]) != 0)
+        memcpy(c->u.p, data, sizeof(c->u.p)), data = c->u.p;
+# endif
     sha512_block_data_order(c, data, 1);
 }
 
@@ -407,6 +354,18 @@ static const SHA_LONG64 K512[80] = {
                                 asm ("rotrdi %0,%1,%2"  \
                                 : "=r"(ret)             \
                                 : "r"(a),"K"(n)); ret;  })
+#    elif defined(__aarch64__)
+#     define ROTR(a,n)    ({ SHA_LONG64 ret;              \
+                                asm ("ror %0,%1,%2"     \
+                                : "=r"(ret)             \
+                                : "r"(a),"I"(n)); ret;  })
+#     if  defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+        __BYTE_ORDER__==__ORDER_LITTLE_ENDIAN__
+#      define PULL64(x)   ({ SHA_LONG64 ret;                      \
+                                asm ("rev       %0,%1"          \
+                                : "=r"(ret)                     \
+                                : "r"(*((const SHA_LONG64 *)(&(x))))); ret;             })
+#     endif
 #    endif
 #   elif defined(_MSC_VER)
 #    if defined(_WIN64)         /* applies to both IA-64 and AMD64 */

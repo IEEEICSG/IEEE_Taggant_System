@@ -101,13 +101,19 @@ extern "C" {
 #  undef OPENSSL_SYS_UNIX
 #  define OPENSSL_SYS_WIN32_UWIN
 # else
-#  if defined(__CYGWIN32__) || defined(OPENSSL_SYSNAME_CYGWIN32)
+#  if defined(__CYGWIN__) || defined(OPENSSL_SYSNAME_CYGWIN)
 #   undef OPENSSL_SYS_UNIX
 #   define OPENSSL_SYS_WIN32_CYGWIN
 #  else
 #   if defined(_WIN32) || defined(OPENSSL_SYSNAME_WIN32)
 #    undef OPENSSL_SYS_UNIX
 #    define OPENSSL_SYS_WIN32
+#   endif
+#   if defined(_WIN64) || defined(OPENSSL_SYSNAME_WIN64)
+#    undef OPENSSL_SYS_UNIX
+#    if !defined(OPENSSL_SYS_WIN64)
+#     define OPENSSL_SYS_WIN64
+#    endif
 #   endif
 #   if defined(OPENSSL_SYSNAME_WINNT)
 #    undef OPENSSL_SYS_UNIX
@@ -121,7 +127,7 @@ extern "C" {
 # endif
 
 /* Anything that tries to look like Microsoft is "Windows" */
-# if defined(OPENSSL_SYS_WIN32) || defined(OPENSSL_SYS_WINNT) || defined(OPENSSL_SYS_WINCE)
+# if defined(OPENSSL_SYS_WIN32) || defined(OPENSSL_SYS_WIN64) || defined(OPENSSL_SYS_WINNT) || defined(OPENSSL_SYS_WINCE)
 #  undef OPENSSL_SYS_UNIX
 #  define OPENSSL_SYS_WINDOWS
 #  ifndef OPENSSL_SYS_MSDOS
@@ -294,6 +300,26 @@ extern "C" {
 #  define OPENSSL_IMPLEMENT_GLOBAL(type,name,value) OPENSSL_GLOBAL type _shadow_##name=value;
 #  define OPENSSL_DECLARE_GLOBAL(type,name) OPENSSL_EXPORT type _shadow_##name
 #  define OPENSSL_GLOBAL_REF(name) _shadow_##name
+# endif
+
+# if defined(OPENSSL_SYS_MACINTOSH_CLASSIC) && macintosh==1 && !defined(MAC_OS_GUSI_SOURCE)
+#  define ossl_ssize_t long
+# endif
+
+# ifdef OPENSSL_SYS_MSDOS
+#  define ossl_ssize_t long
+# endif
+
+# if defined(NeXT) || defined(OPENSSL_SYS_NEWS4) || defined(OPENSSL_SYS_SUNOS)
+#  define ssize_t int
+# endif
+
+# if defined(__ultrix) && !defined(ssize_t)
+#  define ossl_ssize_t int
+# endif
+
+# ifndef ossl_ssize_t
+#  define ossl_ssize_t ssize_t
 # endif
 
 #ifdef  __cplusplus

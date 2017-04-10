@@ -87,7 +87,7 @@ UNSIGNED32 taggant2_validate_default_hashes_txt(PTAGGANTCONTEXT pCtx, PTAGGANTOB
 UNSIGNED32 taggant2_validate_default_hashes_bin(PTAGGANTCONTEXT pCtx, PTAGGANTOBJ2 pTaggantObj, PFILEOBJECT hFile, UNSIGNED64 uFileEnd);
 UNSIGNED32 taggant2_validate_hashmap(PTAGGANTCONTEXT pCtx, PTAGGANTOBJ2 pTaggantObj, PFILEOBJECT hFile);
 UNSIGNED32 taggant2_get_timestamp(PTAGGANTOBJ2 pTaggantObj, UNSIGNED64 *pTime, PVOID pTSRootCert);
-UNSIGNED32 taggant2_get_info(PTAGGANT2 pTaggant, PTAGGANTOBJ2 pTaggantObj, ENUMTAGINFO eKey, UNSIGNED32 *pSize, PINFO pInfo);
+UNSIGNED32 taggant2_get_info(PTAGGANTOBJ2 pTaggantObj, ENUMTAGINFO eKey, UNSIGNED32 *pSize, PINFO pInfo);
 #endif
 
 #ifdef SPV_LIBRARY

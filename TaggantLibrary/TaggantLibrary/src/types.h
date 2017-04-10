@@ -235,6 +235,9 @@ typedef struct
 
 typedef struct
 {
+    X509 *root;
+    X509 *spv;
+    X509 *user;
     CMS_ContentInfo* CMS;
     TS_RESP* TSResponse;
     PTAGGANTBLOB pTagBlob;
@@ -243,6 +246,9 @@ typedef struct
 
 typedef struct
 {
+    X509 *root;
+    X509 *spv;
+    X509 *user;
     CMS_ContentInfo* CMS;
     TS_RESP* TSResponse;
     TAGGANTBLOB2 tagBlob;

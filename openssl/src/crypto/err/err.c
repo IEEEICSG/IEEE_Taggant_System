@@ -868,6 +868,9 @@ void ERR_error_string_n(unsigned long e, char *buf, size_t len)
     const char *ls, *fs, *rs;
     unsigned long l, f, r;
 
+    if (len == 0)
+        return;
+
     l = ERR_GET_LIB(e);
     f = ERR_GET_FUNC(e);
     r = ERR_GET_REASON(e);
@@ -1075,6 +1078,13 @@ void ERR_set_error_data(char *data, int flags)
 void ERR_add_error_data(int num, ...)
 {
     va_list args;
+    va_start(args, num);
+    ERR_add_error_vdata(num, args);
+    va_end(args);
+}
+
+void ERR_add_error_vdata(int num, va_list args)
+{
     int i, n, s;
     char *str, *p, *a;
 
@@ -1084,7 +1094,6 @@ void ERR_add_error_data(int num, ...)
         return;
     str[0] = '\0';
 
-    va_start(args, num);
     n = 0;
     for (i = 0; i < num; i++) {
         a = va_arg(args, char *);
@@ -1096,7 +1105,7 @@ void ERR_add_error_data(int num, ...)
                 p = OPENSSL_realloc(str, s + 1);
                 if (p == NULL) {
                     OPENSSL_free(str);
-                    goto err;
+                    return;
                 } else
                     str = p;
             }
@@ -1104,9 +1113,6 @@ void ERR_add_error_data(int num, ...)
         }
     }
     ERR_set_error_data(str, ERR_TXT_MALLOCED | ERR_TXT_STRING);
-
- err:
-    va_end(args);
 }
 
 int ERR_set_mark(void)

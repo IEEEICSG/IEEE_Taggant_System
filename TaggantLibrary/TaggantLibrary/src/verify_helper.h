@@ -64,6 +64,6 @@
 
 #include <openssl/ossl_typ.h>
 
-int verify_certificates_chain(X509_STORE_CTX *ctx);
+int verify_cms_cb(int ok, X509_STORE_CTX *ctx);
 
 #endif /* VERIFY_HELPER_H_ */

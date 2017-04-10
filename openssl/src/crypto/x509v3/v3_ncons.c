@@ -132,6 +132,8 @@ static void *v2i_NAME_CONSTRAINTS(const X509V3_EXT_METHOD *method,
         }
         tval.value = val->value;
         sub = GENERAL_SUBTREE_new();
+        if (sub == NULL)
+            goto memerr;
         if (!v2i_GENERAL_NAME_ex(sub->base, method, ctx, &tval, 1))
             goto err;
         if (!*ptree)
@@ -378,7 +380,7 @@ static int nc_dns(ASN1_IA5STRING *dns, ASN1_IA5STRING *base)
      */
     if (dns->length > base->length) {
         dnsptr += dns->length - base->length;
-        if (dnsptr[-1] != '.')
+        if (*baseptr != '.' && dnsptr[-1] != '.')
             return X509_V_ERR_PERMITTED_VIOLATION;
     }
 

@@ -62,6 +62,7 @@
 #include <openssl/evp.h>
 #include <openssl/pkcs12.h>
 #include <openssl/x509.h>
+#include "evp_locl.h"
 
 /* Password based encryption (PBE) functions */
 
@@ -85,6 +86,10 @@ static const EVP_PBE_CTL builtin_pbe[] = {
      NID_des_cbc, NID_md5, PKCS5_PBE_keyivgen},
     {EVP_PBE_TYPE_OUTER, NID_pbeWithSHA1AndRC2_CBC,
      NID_rc2_64_cbc, NID_sha1, PKCS5_PBE_keyivgen},
+
+#ifndef OPENSSL_NO_HMAC
+    {EVP_PBE_TYPE_OUTER, NID_id_pbkdf2, -1, -1, PKCS5_v2_PBKDF2_keyivgen},
+#endif
 
     {EVP_PBE_TYPE_OUTER, NID_pbe_WithSHA1And128BitRC4,
      NID_rc4, NID_sha1, PKCS12_PBE_keyivgen},
@@ -223,12 +228,16 @@ int EVP_PBE_alg_add_type(int pbe_type, int pbe_nid, int cipher_nid,
                          int md_nid, EVP_PBE_KEYGEN *keygen)
 {
     EVP_PBE_CTL *pbe_tmp;
-    if (!pbe_algs)
+
+    if (pbe_algs == NULL) {
         pbe_algs = sk_EVP_PBE_CTL_new(pbe_cmp);
-    if (!(pbe_tmp = (EVP_PBE_CTL *)OPENSSL_malloc(sizeof(EVP_PBE_CTL)))) {
-        EVPerr(EVP_F_EVP_PBE_ALG_ADD_TYPE, ERR_R_MALLOC_FAILURE);
-        return 0;
+        if (pbe_algs == NULL)
+            goto err;
     }
+
+    if ((pbe_tmp = OPENSSL_malloc(sizeof(*pbe_tmp))) == NULL)
+        goto err;
+
     pbe_tmp->pbe_type = pbe_type;
     pbe_tmp->pbe_nid = pbe_nid;
     pbe_tmp->cipher_nid = cipher_nid;
@@ -237,6 +246,10 @@ int EVP_PBE_alg_add_type(int pbe_type, int pbe_nid, int cipher_nid,
 
     sk_EVP_PBE_CTL_push(pbe_algs, pbe_tmp);
     return 1;
+
+ err:
+    EVPerr(EVP_F_EVP_PBE_ALG_ADD_TYPE, ERR_R_MALLOC_FAILURE);
+    return 0;
 }
 
 int EVP_PBE_alg_add(int nid, const EVP_CIPHER *cipher, const EVP_MD *md,

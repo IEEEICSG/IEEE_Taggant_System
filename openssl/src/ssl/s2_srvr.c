@@ -111,6 +111,7 @@
 
 #include "ssl_locl.h"
 #ifndef OPENSSL_NO_SSL2
+#include "../crypto/constant_time_locl.h"
 # include <stdio.h>
 # include <openssl/bio.h>
 # include <openssl/rand.h>
@@ -372,12 +373,15 @@ int ssl2_accept(SSL *s)
 static int get_client_master_key(SSL *s)
 {
     int is_export, i, n, keya;
-    unsigned int ek;
+    unsigned int num_encrypted_key_bytes, key_length;
     unsigned long len;
     unsigned char *p;
     const SSL_CIPHER *cp;
     const EVP_CIPHER *c;
     const EVP_MD *md;
+    unsigned char rand_premaster_secret[SSL_MAX_MASTER_KEY_LENGTH];
+    unsigned char decrypt_good;
+    size_t j;
 
     p = (unsigned char *)s->init_buf->data;
     if (s->state == SSL2_ST_GET_CLIENT_MASTER_KEY_A) {
@@ -398,7 +402,7 @@ static int get_client_master_key(SSL *s)
         }
 
         cp = ssl2_get_cipher_by_char(p);
-        if (cp == NULL) {
+        if (cp == NULL || sk_SSL_CIPHER_find(s->session->ciphers, cp) < 0) {
             ssl2_return_error(s, SSL2_PE_NO_CIPHER);
             SSLerr(SSL_F_GET_CLIENT_MASTER_KEY, SSL_R_NO_CIPHER_MATCH);
             return (-1);
@@ -465,12 +469,6 @@ static int get_client_master_key(SSL *s)
         return (0);
     }
 
-    if (s->session->cipher->algorithm2 & SSL2_CF_8_BYTE_ENC) {
-        is_export = 1;
-        ek = 8;
-    } else
-        ek = 5;
-
     /*
      * The format of the CLIENT-MASTER-KEY message is
      * 1 byte message type
@@ -484,12 +482,27 @@ static int get_client_master_key(SSL *s)
      *
      * If the cipher is an export cipher, then the encrypted key bytes
      * are a fixed portion of the total key (5 or 8 bytes). The size of
-     * this portion is in |ek|. If the cipher is not an export cipher,
-     * then the entire key material is encrypted (i.e., clear key length
-     * must be zero).
+     * this portion is in |num_encrypted_key_bytes|. If the cipher is not an
+     * export cipher, then the entire key material is encrypted (i.e., clear
+     * key length must be zero).
      */
-    if ((!is_export && s->s2->tmp.clear != 0) ||
-        (is_export && s->s2->tmp.clear + ek != (unsigned int)EVP_CIPHER_key_length(c))) {
+    key_length = (unsigned int)EVP_CIPHER_key_length(c);
+    if (key_length > SSL_MAX_MASTER_KEY_LENGTH) {
+        ssl2_return_error(s, SSL2_PE_UNDEFINED_ERROR);
+        SSLerr(SSL_F_GET_CLIENT_MASTER_KEY, ERR_R_INTERNAL_ERROR);
+        return -1;
+    }
+
+    if (s->session->cipher->algorithm2 & SSL2_CF_8_BYTE_ENC) {
+        is_export = 1;
+        num_encrypted_key_bytes = 8;
+    } else if (is_export) {
+        num_encrypted_key_bytes = 5;
+    } else {
+        num_encrypted_key_bytes = key_length;
+    }
+
+    if (s->s2->tmp.clear + num_encrypted_key_bytes != key_length) {
         ssl2_return_error(s, SSL2_PE_UNDEFINED_ERROR);
         SSLerr(SSL_F_GET_CLIENT_MASTER_KEY,SSL_R_BAD_LENGTH);
         return -1;
@@ -499,64 +512,46 @@ static int get_client_master_key(SSL *s)
      * Decryption can't be expanding, so if we don't have enough encrypted
      * bytes to fit the key in the buffer, stop now.
      */
-    if ((is_export && s->s2->tmp.enc < ek) ||
-        (!is_export && s->s2->tmp.enc < (unsigned int)EVP_CIPHER_key_length(c))) {
+    if (s->s2->tmp.enc < num_encrypted_key_bytes) {
         ssl2_return_error(s,SSL2_PE_UNDEFINED_ERROR);
         SSLerr(SSL_F_GET_CLIENT_MASTER_KEY,SSL_R_LENGTH_TOO_SHORT);
         return -1;
     }
+
+    /*
+     * We must not leak whether a decryption failure occurs because of
+     * Bleichenbacher's attack on PKCS #1 v1.5 RSA padding (see RFC 2246,
+     * section 7.4.7.1). The code follows that advice of the TLS RFC and
+     * generates a random premaster secret for the case that the decrypt
+     * fails. See https://tools.ietf.org/html/rfc5246#section-7.4.7.1
+     */
+
+    if (RAND_bytes(rand_premaster_secret,
+                  (int)num_encrypted_key_bytes) <= 0)
+        return 0;
 
     i = ssl_rsa_private_decrypt(s->cert, s->s2->tmp.enc,
                                 &(p[s->s2->tmp.clear]),
                                 &(p[s->s2->tmp.clear]),
                                 (s->s2->ssl2_rollback) ? RSA_SSLV23_PADDING :
                                 RSA_PKCS1_PADDING);
-
-    /* bad decrypt */
-# if 1
+    ERR_clear_error();
     /*
      * If a bad decrypt, continue with protocol but with a random master
      * secret (Bleichenbacher attack)
      */
-    if ((i < 0) || ((!is_export && i != EVP_CIPHER_key_length(c))
-                    || (is_export && i != (int)ek))) {
-        ERR_clear_error();
-        if (is_export)
-            i = ek;
-        else
-            i = EVP_CIPHER_key_length(c);
-        if (RAND_pseudo_bytes(&p[s->s2->tmp.clear], i) <= 0)
-            return 0;
+    decrypt_good = constant_time_eq_int_8(i, (int)num_encrypted_key_bytes);
+    for (j = 0; j < num_encrypted_key_bytes; j++) {
+        p[s->s2->tmp.clear + j] =
+                constant_time_select_8(decrypt_good, p[s->s2->tmp.clear + j],
+                                       rand_premaster_secret[j]);
     }
-# else
-    if (i < 0) {
-        error = 1;
-        SSLerr(SSL_F_GET_CLIENT_MASTER_KEY, SSL_R_BAD_RSA_DECRYPT);
-    }
-    /* incorrect number of key bytes for non export cipher */
-    else if ((!is_export && (i != EVP_CIPHER_key_length(c)))
-             || (is_export && ((i != ek) || (s->s2->tmp.clear + i !=
-                                             EVP_CIPHER_key_length(c))))) {
-        error = 1;
-        SSLerr(SSL_F_GET_CLIENT_MASTER_KEY, SSL_R_WRONG_NUMBER_OF_KEY_BITS);
-    }
-    if (error) {
-        ssl2_return_error(s, SSL2_PE_UNDEFINED_ERROR);
-        return (-1);
-    }
-# endif
 
-    if (is_export)
-        i = EVP_CIPHER_key_length(c);
+    s->session->master_key_length = (int)key_length;
+    memcpy(s->session->master_key, p, key_length);
+    OPENSSL_cleanse(p, key_length);
 
-    if (i > SSL_MAX_MASTER_KEY_LENGTH) {
-        ssl2_return_error(s, SSL2_PE_UNDEFINED_ERROR);
-        SSLerr(SSL_F_GET_CLIENT_MASTER_KEY, ERR_R_INTERNAL_ERROR);
-        return -1;
-    }
-    s->session->master_key_length = i;
-    memcpy(s->session->master_key, p, (unsigned int)i);
-    return (1);
+    return 1;
 }
 
 static int get_client_hello(SSL *s)
@@ -600,6 +595,11 @@ static int get_client_hello(SSL *s)
         s->s2->tmp.cipher_spec_length = i;
         n2s(p, i);
         s->s2->tmp.session_id_length = i;
+        if ((i < 0) || (i > SSL_MAX_SSL_SESSION_ID_LENGTH)) {
+            ssl2_return_error(s, SSL2_PE_UNDEFINED_ERROR);
+            SSLerr(SSL_F_GET_CLIENT_HELLO, SSL_R_LENGTH_MISMATCH);
+            return -1;
+        }
         n2s(p, i);
         s->s2->challenge_length = i;
         if ((i < SSL2_MIN_CHALLENGE_LENGTH) ||
@@ -689,8 +689,12 @@ static int get_client_hello(SSL *s)
             prio = cs;
             allow = cl;
         }
+
+        /* Generate list of SSLv2 ciphers shared between client and server */
         for (z = 0; z < sk_SSL_CIPHER_num(prio); z++) {
-            if (sk_SSL_CIPHER_find(allow, sk_SSL_CIPHER_value(prio, z)) < 0) {
+            const SSL_CIPHER *cp = sk_SSL_CIPHER_value(prio, z);
+            if ((cp->algorithm_ssl & SSL_SSLV2) == 0 ||
+                sk_SSL_CIPHER_find(allow, cp) < 0) {
                 (void)sk_SSL_CIPHER_delete(prio, z);
                 z--;
             }
@@ -698,6 +702,13 @@ static int get_client_hello(SSL *s)
         if (s->options & SSL_OP_CIPHER_SERVER_PREFERENCE) {
             sk_SSL_CIPHER_free(s->session->ciphers);
             s->session->ciphers = prio;
+        }
+
+        /* Make sure we have at least one cipher in common */
+        if (sk_SSL_CIPHER_num(s->session->ciphers) == 0) {
+            ssl2_return_error(s, SSL2_PE_NO_CIPHER);
+            SSLerr(SSL_F_GET_CLIENT_HELLO, SSL_R_NO_CIPHER_MATCH);
+            return -1;
         }
         /*
          * s->session->ciphers should now have a list of ciphers that are on
@@ -808,8 +819,7 @@ static int server_hello(SSL *s)
         /* make and send conn_id */
         s2n(SSL2_CONNECTION_ID_LENGTH, p); /* add conn_id length */
         s->s2->conn_id_length = SSL2_CONNECTION_ID_LENGTH;
-        if (RAND_pseudo_bytes(s->s2->conn_id, (int)s->s2->conn_id_length) <=
-            0)
+        if (RAND_bytes(s->s2->conn_id, (int)s->s2->conn_id_length) <= 0)
             return -1;
         memcpy(d, s->s2->conn_id, SSL2_CONNECTION_ID_LENGTH);
         d += SSL2_CONNECTION_ID_LENGTH;
@@ -948,7 +958,7 @@ static int request_certificate(SSL *s)
         p = (unsigned char *)s->init_buf->data;
         *(p++) = SSL2_MT_REQUEST_CERTIFICATE;
         *(p++) = SSL2_AT_MD5_WITH_RSA_ENCRYPTION;
-        if (RAND_pseudo_bytes(ccd, SSL2_MIN_CERT_CHALLENGE_LENGTH) <= 0)
+        if (RAND_bytes(ccd, SSL2_MIN_CERT_CHALLENGE_LENGTH) <= 0)
             return -1;
         memcpy(p, ccd, SSL2_MIN_CERT_CHALLENGE_LENGTH);
 
@@ -1077,10 +1087,11 @@ static int request_certificate(SSL *s)
         EVP_PKEY *pkey = NULL;
 
         EVP_MD_CTX_init(&ctx);
-        EVP_VerifyInit_ex(&ctx, s->ctx->rsa_md5, NULL);
-        EVP_VerifyUpdate(&ctx, s->s2->key_material,
-                         s->s2->key_material_length);
-        EVP_VerifyUpdate(&ctx, ccd, SSL2_MIN_CERT_CHALLENGE_LENGTH);
+        if (!EVP_VerifyInit_ex(&ctx, s->ctx->rsa_md5, NULL)
+            || !EVP_VerifyUpdate(&ctx, s->s2->key_material,
+                                 s->s2->key_material_length)
+            || !EVP_VerifyUpdate(&ctx, ccd, SSL2_MIN_CERT_CHALLENGE_LENGTH))
+            goto msg_end;
 
         i = i2d_X509(s->cert->pkeys[SSL_PKEY_RSA_ENC].x509, NULL);
         buf2 = OPENSSL_malloc((unsigned int)i);
@@ -1090,7 +1101,10 @@ static int request_certificate(SSL *s)
         }
         p2 = buf2;
         i = i2d_X509(s->cert->pkeys[SSL_PKEY_RSA_ENC].x509, &p2);
-        EVP_VerifyUpdate(&ctx, buf2, (unsigned int)i);
+        if (!EVP_VerifyUpdate(&ctx, buf2, (unsigned int)i)) {
+            OPENSSL_free(buf2);
+            goto msg_end;
+        }
         OPENSSL_free(buf2);
 
         pkey = X509_get_pubkey(x509);

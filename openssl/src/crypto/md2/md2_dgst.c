@@ -119,7 +119,7 @@ const char *MD2_options(void)
         return ("md2(int)");
 }
 
-int MD2_Init(MD2_CTX *c)
+fips_md_init(MD2)
 {
     c->num = 0;
     memset(c->state, 0, sizeof c->state);
@@ -219,6 +219,6 @@ int MD2_Final(unsigned char *md, MD2_CTX *c)
 
     for (i = 0; i < 16; i++)
         md[i] = (UCHAR) (p1[i] & 0xff);
-    memset((char *)&c, 0, sizeof(c));
+    OPENSSL_cleanse(c, sizeof(*c));
     return 1;
 }

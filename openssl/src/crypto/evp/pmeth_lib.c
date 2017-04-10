@@ -74,7 +74,8 @@ DECLARE_STACK_OF(EVP_PKEY_METHOD)
 STACK_OF(EVP_PKEY_METHOD) *app_pkey_methods = NULL;
 
 extern const EVP_PKEY_METHOD rsa_pkey_meth, dh_pkey_meth, dsa_pkey_meth;
-extern const EVP_PKEY_METHOD ec_pkey_meth, hmac_pkey_meth;
+extern const EVP_PKEY_METHOD ec_pkey_meth, hmac_pkey_meth, cmac_pkey_meth;
+extern const EVP_PKEY_METHOD dhx_pkey_meth;
 
 static const EVP_PKEY_METHOD *standard_methods[] = {
 #ifndef OPENSSL_NO_RSA
@@ -90,6 +91,12 @@ static const EVP_PKEY_METHOD *standard_methods[] = {
     &ec_pkey_meth,
 #endif
     &hmac_pkey_meth,
+#ifndef OPENSSL_NO_CMAC
+    &cmac_pkey_meth,
+#endif
+#ifndef OPENSSL_NO_DH
+    &dhx_pkey_meth
+#endif
 };
 
 DECLARE_OBJ_BSEARCH_CMP_FN(const EVP_PKEY_METHOD *, const EVP_PKEY_METHOD *,
@@ -192,40 +199,66 @@ static EVP_PKEY_CTX *int_ctx_new(EVP_PKEY *pkey, ENGINE *e, int id)
 EVP_PKEY_METHOD *EVP_PKEY_meth_new(int id, int flags)
 {
     EVP_PKEY_METHOD *pmeth;
+
     pmeth = OPENSSL_malloc(sizeof(EVP_PKEY_METHOD));
     if (!pmeth)
         return NULL;
 
+    memset(pmeth, 0, sizeof(EVP_PKEY_METHOD));
+
     pmeth->pkey_id = id;
     pmeth->flags = flags | EVP_PKEY_FLAG_DYNAMIC;
-
-    pmeth->init = 0;
-    pmeth->copy = 0;
-    pmeth->cleanup = 0;
-    pmeth->paramgen_init = 0;
-    pmeth->paramgen = 0;
-    pmeth->keygen_init = 0;
-    pmeth->keygen = 0;
-    pmeth->sign_init = 0;
-    pmeth->sign = 0;
-    pmeth->verify_init = 0;
-    pmeth->verify = 0;
-    pmeth->verify_recover_init = 0;
-    pmeth->verify_recover = 0;
-    pmeth->signctx_init = 0;
-    pmeth->signctx = 0;
-    pmeth->verifyctx_init = 0;
-    pmeth->verifyctx = 0;
-    pmeth->encrypt_init = 0;
-    pmeth->encrypt = 0;
-    pmeth->decrypt_init = 0;
-    pmeth->decrypt = 0;
-    pmeth->derive_init = 0;
-    pmeth->derive = 0;
-    pmeth->ctrl = 0;
-    pmeth->ctrl_str = 0;
-
     return pmeth;
+}
+
+void EVP_PKEY_meth_get0_info(int *ppkey_id, int *pflags,
+                             const EVP_PKEY_METHOD *meth)
+{
+    if (ppkey_id)
+        *ppkey_id = meth->pkey_id;
+    if (pflags)
+        *pflags = meth->flags;
+}
+
+void EVP_PKEY_meth_copy(EVP_PKEY_METHOD *dst, const EVP_PKEY_METHOD *src)
+{
+
+    dst->init = src->init;
+    dst->copy = src->copy;
+    dst->cleanup = src->cleanup;
+
+    dst->paramgen_init = src->paramgen_init;
+    dst->paramgen = src->paramgen;
+
+    dst->keygen_init = src->keygen_init;
+    dst->keygen = src->keygen;
+
+    dst->sign_init = src->sign_init;
+    dst->sign = src->sign;
+
+    dst->verify_init = src->verify_init;
+    dst->verify = src->verify;
+
+    dst->verify_recover_init = src->verify_recover_init;
+    dst->verify_recover = src->verify_recover;
+
+    dst->signctx_init = src->signctx_init;
+    dst->signctx = src->signctx;
+
+    dst->verifyctx_init = src->verifyctx_init;
+    dst->verifyctx = src->verifyctx;
+
+    dst->encrypt_init = src->encrypt_init;
+    dst->encrypt = src->encrypt;
+
+    dst->decrypt_init = src->decrypt_init;
+    dst->decrypt = src->decrypt;
+
+    dst->derive_init = src->derive_init;
+    dst->derive = src->derive;
+
+    dst->ctrl = src->ctrl;
+    dst->ctrl_str = src->ctrl_str;
 }
 
 void EVP_PKEY_meth_free(EVP_PKEY_METHOD *pmeth)

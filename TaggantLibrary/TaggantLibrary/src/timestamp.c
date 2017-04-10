@@ -87,7 +87,6 @@ TS_REQ* get_timestamp_request(char* hash, int hash_size, ASN1_INTEGER *nonce_asn
     TS_MSG_IMPRINT *msg_imprint = NULL;
     X509_ALGOR *algo = NULL;
     unsigned char *data = NULL;
-    ASN1_OBJECT *policy_obj = NULL;
     const EVP_MD* md = NULL;
 
     /* Setting default message digest. */
@@ -132,13 +131,6 @@ TS_REQ* get_timestamp_request(char* hash, int hash_size, ASN1_INTEGER *nonce_asn
 
     if (!TS_REQ_set_msg_imprint(ts_req, msg_imprint)) goto err;
 
-    /* Setting policy if requested. */
-    if ((policy_obj = OBJ_txt2obj("1.1.3", 0)) == NULL)
-    {
-        goto err;
-    }
-    if (policy_obj && !TS_REQ_set_policy_id(ts_req, policy_obj)) goto err;
-
     /* Setting nonce if requested. */
     if (nonce_asn1 && !TS_REQ_set_nonce(ts_req, nonce_asn1)) goto err;
 
@@ -155,7 +147,7 @@ TS_REQ* get_timestamp_request(char* hash, int hash_size, ASN1_INTEGER *nonce_asn
     TS_MSG_IMPRINT_free(msg_imprint);
     X509_ALGOR_free(algo);
     OPENSSL_free(data);
-    ASN1_OBJECT_free(policy_obj);
+
     return ts_req;
 }
 
@@ -199,12 +191,14 @@ UNSIGNED32 get_timestamp_response(const char* urlStr, char* hash, UNSIGNED32 has
     {
         goto end;
     }
-
+    
     requestBio = BIO_new(BIO_s_mem());
+
     if (requestBio == NULL)
     {
         goto end;
     }
+
 
     if (!i2d_TS_REQ_bio(requestBio, tsRequest))
     {
@@ -278,10 +272,12 @@ http_redirect:
     if ((httpResult == HTTP_NOERROR) && (resultBuffer))
     {
         responseBio = BIO_new(BIO_s_mem());
+
         if (responseBio == NULL)
         {
             goto end;
         }
+
         BIO_write(responseBio, resultBuffer, resultLength);
 
         *tsResponse = d2i_TS_RESP_bio(responseBio, NULL);

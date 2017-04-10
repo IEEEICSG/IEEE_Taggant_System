@@ -1,4 +1,4 @@
-/* crypto/bio/bss_bio.c  -*- Mode: C; c-file-style: "eay" -*- */
+/* crypto/bio/bss_bio.c  */
 /* ====================================================================
  * Copyright (c) 1998-2003 The OpenSSL Project.  All rights reserved.
  *
@@ -149,9 +149,13 @@ static int bio_new(BIO *bio)
         return 0;
 
     b->peer = NULL;
+    b->closed = 0;
+    b->len = 0;
+    b->offset = 0;
     /* enough for one TLS record (just a default) */
     b->size = 17 * 1024;
     b->buf = NULL;
+    b->request = 0;
 
     bio->ptr = b;
     return 1;
@@ -270,10 +274,10 @@ static int bio_read(BIO *bio, char *buf, int size_)
  * WARNING: The non-copying interface is largely untested as of yet and may
  * contain bugs.
  */
-static ssize_t bio_nread0(BIO *bio, char **buf)
+static ossl_ssize_t bio_nread0(BIO *bio, char **buf)
 {
     struct bio_bio_st *b, *peer_b;
-    ssize_t num;
+    ossl_ssize_t num;
 
     BIO_clear_retry_flags(bio);
 
@@ -307,15 +311,15 @@ static ssize_t bio_nread0(BIO *bio, char **buf)
     return num;
 }
 
-static ssize_t bio_nread(BIO *bio, char **buf, size_t num_)
+static ossl_ssize_t bio_nread(BIO *bio, char **buf, size_t num_)
 {
     struct bio_bio_st *b, *peer_b;
-    ssize_t num, available;
+    ossl_ssize_t num, available;
 
     if (num_ > SSIZE_MAX)
         num = SSIZE_MAX;
     else
-        num = (ssize_t) num_;
+        num = (ossl_ssize_t) num_;
 
     available = bio_nread0(bio, buf);
     if (num > available)
@@ -415,7 +419,7 @@ static int bio_write(BIO *bio, const char *buf, int num_)
  * (example usage:  bio_nwrite0(), write to buffer, bio_nwrite()
  *  or just         bio_nwrite(), write to buffer)
  */
-static ssize_t bio_nwrite0(BIO *bio, char **buf)
+static ossl_ssize_t bio_nwrite0(BIO *bio, char **buf)
 {
     struct bio_bio_st *b;
     size_t num;
@@ -463,15 +467,15 @@ static ssize_t bio_nwrite0(BIO *bio, char **buf)
     return num;
 }
 
-static ssize_t bio_nwrite(BIO *bio, char **buf, size_t num_)
+static ossl_ssize_t bio_nwrite(BIO *bio, char **buf, size_t num_)
 {
     struct bio_bio_st *b;
-    ssize_t num, space;
+    ossl_ssize_t num, space;
 
     if (num_ > SSIZE_MAX)
         num = SSIZE_MAX;
     else
-        num = (ssize_t) num_;
+        num = (ossl_ssize_t) num_;
 
     space = bio_nwrite0(bio, buf);
     if (num > space)
@@ -655,16 +659,15 @@ static long bio_ctrl(BIO *bio, int cmd, long num, void *ptr)
         break;
 
     case BIO_CTRL_EOF:
-        {
-            BIO *other_bio = ptr;
+        if (b->peer != NULL) {
+            struct bio_bio_st *peer_b = b->peer->ptr;
 
-            if (other_bio) {
-                struct bio_bio_st *other_b = other_bio->ptr;
-
-                assert(other_b != NULL);
-                ret = other_b->len == 0 && other_b->closed;
-            } else
+            if (peer_b->len == 0 && peer_b->closed)
                 ret = 1;
+            else
+                ret = 0;
+        } else {
+            ret = 1;
         }
         break;
 

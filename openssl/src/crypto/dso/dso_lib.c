@@ -1,4 +1,4 @@
-/* dso_lib.c -*- mode:C; c-file-style: "eay" -*- */
+/* dso_lib.c */
 /*
  * Written by Geoff Thorpe (geoff@geoffthorpe.net) for the OpenSSL project
  * 2000.
@@ -122,6 +122,7 @@ DSO *DSO_new_method(DSO_METHOD *meth)
         ret->meth = meth;
     ret->references = 1;
     if ((ret->meth->init != NULL) && !ret->meth->init(ret)) {
+        sk_void_free(ret->meth_data);
         OPENSSL_free(ret);
         ret = NULL;
     }
@@ -285,7 +286,7 @@ DSO_FUNC_TYPE DSO_bind_func(DSO *dso, const char *symname)
  * honest. For one thing, I think I have to return a negative value for any
  * error because possible DSO_ctrl() commands may return values such as
  * "size"s that can legitimately be zero (making the standard
- * "if(DSO_cmd(...))" form that works almost everywhere else fail at odd
+ * "if (DSO_cmd(...))" form that works almost everywhere else fail at odd
  * times. I'd prefer "output" values to be passed by reference and the return
  * value as success/failure like usual ... but we conform when we must... :-)
  */

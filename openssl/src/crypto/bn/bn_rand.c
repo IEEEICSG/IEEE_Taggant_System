@@ -122,9 +122,13 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
     time_t tim;
 
     if (bits == 0) {
+        if (top != -1 || bottom != 0)
+            goto toosmall;
         BN_zero(rnd);
         return 1;
     }
+    if (bits < 0 || (bits == 1 && top > 0))
+        goto toosmall;
 
     bytes = (bits + 7) / 8;
     bit = (bits - 1) % 8;
@@ -140,13 +144,9 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
     time(&tim);
     RAND_add(&tim, sizeof(tim), 0.0);
 
-    if (pseudorand) {
-        if (RAND_pseudo_bytes(buf, bytes) == -1)
-            goto err;
-    } else {
-        if (RAND_bytes(buf, bytes) <= 0)
-            goto err;
-    }
+    /* We ignore the value of pseudorand and always call RAND_bytes */
+    if (RAND_bytes(buf, bytes) <= 0)
+        goto err;
 
 #if 1
     if (pseudorand == 2) {
@@ -157,7 +157,8 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
         unsigned char c;
 
         for (i = 0; i < bytes; i++) {
-            RAND_pseudo_bytes(&c, 1);
+            if (RAND_pseudo_bytes(&c, 1) < 0)
+                goto err;
             if (c >= 128 && i > 0)
                 buf[i] = buf[i - 1];
             else if (c < 42)
@@ -168,7 +169,7 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
     }
 #endif
 
-    if (top != -1) {
+    if (top >= 0) {
         if (top) {
             if (bit == 0) {
                 buf[0] = 1;
@@ -193,6 +194,10 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
     }
     bn_check_top(rnd);
     return (ret);
+
+toosmall:
+    BNerr(BN_F_BNRAND, BN_R_BITS_TOO_SMALL);
+    return 0;
 }
 
 int BN_rand(BIGNUM *rnd, int bits, int top, int bottom)

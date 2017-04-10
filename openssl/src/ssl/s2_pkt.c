@@ -307,6 +307,9 @@ int ssl2_peek(SSL *s, void *buf, int len)
     return ssl2_read_internal(s, buf, len, 1);
 }
 
+/*
+ * Return values are as per SSL_read()
+ */
 static int read_n(SSL *s, unsigned int n, unsigned int max,
                   unsigned int extend)
 {
@@ -374,7 +377,7 @@ static int read_n(SSL *s, unsigned int n, unsigned int max,
 # endif
         if (i <= 0) {
             s->s2->rbuf_left += newb;
-            return (i);
+            return i;
         }
         newb += i;
     }
@@ -441,6 +444,9 @@ int ssl2_write(SSL *s, const void *_buf, int len)
     }
 }
 
+/*
+ * Return values are as per SSL_write()
+ */
 static int write_pending(SSL *s, const unsigned char *buf, unsigned int len)
 {
     int i;
@@ -477,7 +483,7 @@ static int write_pending(SSL *s, const unsigned char *buf, unsigned int len)
             s->rwstate = SSL_NOTHING;
             return (s->s2->wpend_ret);
         } else if (i <= 0)
-            return (i);
+            return i;
         s->s2->wpend_off += i;
         s->s2->wpend_len -= i;
     }
@@ -576,6 +582,20 @@ static int n_do_ssl_write(SSL *s, const unsigned char *buf, unsigned int len)
     s->s2->padding = p;
     s->s2->mac_data = &(s->s2->wbuf[3]);
     s->s2->wact_data = &(s->s2->wbuf[3 + mac_size]);
+
+    /*
+     * It would be clearer to write this as follows:
+     *     if (mac_size + len + p > SSL2_MAX_RECORD_LENGTH_2_BYTE_HEADER)
+     * However |len| is user input that could in theory be very large. We
+     * know |mac_size| and |p| are small, so to avoid any possibility of
+     * overflow we write it like this.
+     *
+     * In theory this should never fail because the logic above should have
+     * modified |len| if it is too big. But we are being cautious.
+     */
+    if (len > (SSL2_MAX_RECORD_LENGTH_2_BYTE_HEADER - (mac_size + p))) {
+        return -1;
+    }
     /* we copy the data into s->s2->wbuf */
     memcpy(s->s2->wact_data, buf, len);
     if (p)

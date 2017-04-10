@@ -760,7 +760,7 @@ EXPORT UNSIGNED32 STDCALL TaggantGetInfo(__in PTAGGANTOBJ pTaggantObj, ENUMTAGIN
         res = taggant_get_info(pTaggantObj->tagObj1, eKey, pSize, pInfo);
         break;
     case TAGGANT_LIBRARY_VERSION2:
-        res = taggant2_get_info(pTaggantObj->tagParent->pTag2, pTaggantObj->tagObj2, eKey, pSize, pInfo);
+        res = taggant2_get_info(pTaggantObj->tagObj2, eKey, pSize, pInfo);
         break;
     }
 

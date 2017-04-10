@@ -51,10 +51,12 @@
  * input. This is done for perfomance.
  */
 
+#include <openssl/crypto.h>
 #include "wp_locl.h"
+#include <openssl/crypto.h>
 #include <string.h>
 
-int WHIRLPOOL_Init(WHIRLPOOL_CTX *c)
+fips_md_init(WHIRLPOOL)
 {
     memset(c, 0, sizeof(*c));
     return (1);
@@ -236,7 +238,7 @@ int WHIRLPOOL_Final(unsigned char *md, WHIRLPOOL_CTX *c)
 
     if (md) {
         memcpy(md, c->H.c, WHIRLPOOL_DIGEST_LENGTH);
-        memset(c, 0, sizeof(*c));
+        OPENSSL_cleanse(c, sizeof(*c));
         return (1);
     }
     return (0);

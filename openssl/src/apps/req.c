@@ -101,8 +101,8 @@
 #define STRING_MASK     "string_mask"
 #define UTF8_IN         "utf8"
 
-#define DEFAULT_KEY_LENGTH      512
-#define MIN_KEY_LENGTH          384
+#define DEFAULT_KEY_LENGTH      2048
+#define MIN_KEY_LENGTH          512
 
 #undef PROG
 #define PROG    req_main
@@ -169,7 +169,7 @@ int MAIN(int argc, char **argv)
     EVP_PKEY_CTX *genctx = NULL;
     const char *keyalg = NULL;
     char *keyalgstr = NULL;
-    STACK_OF(OPENSSL_STRING) *pkeyopts = NULL;
+    STACK_OF(OPENSSL_STRING) *pkeyopts = NULL, *sigopts = NULL;
     EVP_PKEY *pkey = NULL;
     int i = 0, badops = 0, newreq = 0, verbose = 0, pkey_type = -1;
     long newkey = -1;
@@ -179,9 +179,7 @@ int MAIN(int argc, char **argv)
     int nodes = 0, kludge = 0, newhdr = 0, subject = 0, pubkey = 0;
     char *infile, *outfile, *prog, *keyfile = NULL, *template =
         NULL, *keyout = NULL;
-#ifndef OPENSSL_NO_ENGINE
     char *engine = NULL;
-#endif
     char *extensions = NULL;
     char *req_exts = NULL;
     const EVP_CIPHER *cipher = NULL;
@@ -295,6 +293,13 @@ int MAIN(int argc, char **argv)
                 pkeyopts = sk_OPENSSL_STRING_new_null();
             if (!pkeyopts || !sk_OPENSSL_STRING_push(pkeyopts, *(++argv)))
                 goto bad;
+        } else if (strcmp(*argv, "-sigopt") == 0) {
+            if (--argc < 1)
+                goto bad;
+            if (!sigopts)
+                sigopts = sk_OPENSSL_STRING_new_null();
+            if (!sigopts || !sk_OPENSSL_STRING_push(sigopts, *(++argv)))
+                goto bad;
         } else if (strcmp(*argv, "-batch") == 0)
             batch = 1;
         else if (strcmp(*argv, "-newhdr") == 0)
@@ -325,9 +330,10 @@ int MAIN(int argc, char **argv)
             subject = 1;
         else if (strcmp(*argv, "-text") == 0)
             text = 1;
-        else if (strcmp(*argv, "-x509") == 0)
+        else if (strcmp(*argv, "-x509") == 0) {
+            newreq = 1;
             x509 = 1;
-        else if (strcmp(*argv, "-asn1-kludge") == 0)
+        } else if (strcmp(*argv, "-asn1-kludge") == 0)
             kludge = 1;
         else if (strcmp(*argv, "-no-asn1-kludge") == 0)
             kludge = 0;
@@ -587,9 +593,7 @@ int MAIN(int argc, char **argv)
     if ((in == NULL) || (out == NULL))
         goto end;
 
-#ifndef OPENSSL_NO_ENGINE
     e = setup_engine(bio_err, engine, 0);
-#endif
 
     if (keyfile != NULL) {
         pkey = load_key(bio_err, keyfile, keyform, 0, passin, e,
@@ -749,7 +753,7 @@ int MAIN(int argc, char **argv)
         }
     }
 
-    if (newreq || x509) {
+    if (newreq) {
         if (pkey == NULL) {
             BIO_printf(bio_err, "you need to specify a private key\n");
             goto end;
@@ -818,7 +822,8 @@ int MAIN(int argc, char **argv)
                 goto end;
             }
 
-            if (!(i = X509_sign(x509ss, pkey, digest))) {
+            i = do_X509_sign(bio_err, x509ss, pkey, digest, sigopts);
+            if (!i) {
                 ERR_print_errors(bio_err);
                 goto end;
             }
@@ -838,7 +843,8 @@ int MAIN(int argc, char **argv)
                            req_exts);
                 goto end;
             }
-            if (!(i = X509_REQ_sign(req, pkey, digest))) {
+            i = do_X509_REQ_sign(bio_err, req, pkey, digest, sigopts);
+            if (!i) {
                 ERR_print_errors(bio_err);
                 goto end;
             }
@@ -1019,6 +1025,8 @@ int MAIN(int argc, char **argv)
         EVP_PKEY_CTX_free(genctx);
     if (pkeyopts)
         sk_OPENSSL_STRING_free(pkeyopts);
+    if (sigopts)
+        sk_OPENSSL_STRING_free(sigopts);
 #ifndef OPENSSL_NO_ENGINE
     if (gen_eng)
         ENGINE_free(gen_eng);
@@ -1028,6 +1036,7 @@ int MAIN(int argc, char **argv)
     X509_REQ_free(req);
     X509_free(x509ss);
     ASN1_INTEGER_free(serial);
+    release_engine(e);
     if (passargin && passin)
         OPENSSL_free(passin);
     if (passargout && passout)
@@ -1320,12 +1329,11 @@ static int auto_info(X509_REQ *req, STACK_OF(CONF_VALUE) *dn_sk,
                 break;
             }
 #ifndef CHARSET_EBCDIC
-        if (*p == '+')
+        if (*type == '+') {
 #else
-        if (*p == os_toascii['+'])
+        if (*type == os_toascii['+']) {
 #endif
-        {
-            p++;
+            type++;
             mval = -1;
         } else
             mval = 0;
@@ -1660,4 +1668,62 @@ static int genpkey_cb(EVP_PKEY_CTX *ctx)
     p = n;
 #endif
     return 1;
+}
+
+static int do_sign_init(BIO *err, EVP_MD_CTX *ctx, EVP_PKEY *pkey,
+                        const EVP_MD *md, STACK_OF(OPENSSL_STRING) *sigopts)
+{
+    EVP_PKEY_CTX *pkctx = NULL;
+    int i;
+    EVP_MD_CTX_init(ctx);
+    if (!EVP_DigestSignInit(ctx, &pkctx, md, NULL, pkey))
+        return 0;
+    for (i = 0; i < sk_OPENSSL_STRING_num(sigopts); i++) {
+        char *sigopt = sk_OPENSSL_STRING_value(sigopts, i);
+        if (pkey_ctrl_string(pkctx, sigopt) <= 0) {
+            BIO_printf(err, "parameter error \"%s\"\n", sigopt);
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int do_X509_sign(BIO *err, X509 *x, EVP_PKEY *pkey, const EVP_MD *md,
+                 STACK_OF(OPENSSL_STRING) *sigopts)
+{
+    int rv;
+    EVP_MD_CTX mctx;
+    EVP_MD_CTX_init(&mctx);
+    rv = do_sign_init(err, &mctx, pkey, md, sigopts);
+    if (rv > 0)
+        rv = X509_sign_ctx(x, &mctx);
+    EVP_MD_CTX_cleanup(&mctx);
+    return rv > 0 ? 1 : 0;
+}
+
+int do_X509_REQ_sign(BIO *err, X509_REQ *x, EVP_PKEY *pkey, const EVP_MD *md,
+                     STACK_OF(OPENSSL_STRING) *sigopts)
+{
+    int rv;
+    EVP_MD_CTX mctx;
+    EVP_MD_CTX_init(&mctx);
+    rv = do_sign_init(err, &mctx, pkey, md, sigopts);
+    if (rv > 0)
+        rv = X509_REQ_sign_ctx(x, &mctx);
+    EVP_MD_CTX_cleanup(&mctx);
+    return rv > 0 ? 1 : 0;
+}
+
+int do_X509_CRL_sign(BIO *err, X509_CRL *x, EVP_PKEY *pkey, const EVP_MD *md,
+                     STACK_OF(OPENSSL_STRING) *sigopts)
+{
+    int rv;
+    EVP_MD_CTX mctx;
+    EVP_MD_CTX_init(&mctx);
+    rv = do_sign_init(err, &mctx, pkey, md, sigopts);
+    if (rv > 0)
+        rv = X509_CRL_sign_ctx(x, &mctx);
+    EVP_MD_CTX_cleanup(&mctx);
+    return rv > 0 ? 1 : 0;
 }

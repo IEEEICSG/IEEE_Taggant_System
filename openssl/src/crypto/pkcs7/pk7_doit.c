@@ -340,7 +340,7 @@ BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)
         ivlen = EVP_CIPHER_iv_length(evp_cipher);
         xalg->algorithm = OBJ_nid2obj(EVP_CIPHER_type(evp_cipher));
         if (ivlen > 0)
-            if (RAND_pseudo_bytes(iv, ivlen) <= 0)
+            if (RAND_bytes(iv, ivlen) <= 0)
                 goto err;
         if (EVP_CipherInit_ex(ctx, evp_cipher, NULL, NULL, NULL, 1) <= 0)
             goto err;
@@ -445,6 +445,12 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
 
     switch (i) {
     case NID_pkcs7_signed:
+        /*
+         * p7->d.sign->contents is a PKCS7 structure consisting of a contentType
+         * field and optional content.
+         * data_body is NULL if that structure has no (=detached) content
+         * or if the contentType is wrong (i.e., not "data").
+         */
         data_body = PKCS7_get_octet_string(p7->d.sign->contents);
         if (!PKCS7_is_detached(p7) && data_body == NULL) {
             PKCS7err(PKCS7_F_PKCS7_DATADECODE,
@@ -456,6 +462,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
     case NID_pkcs7_signedAndEnveloped:
         rsk = p7->d.signed_and_enveloped->recipientinfo;
         md_sk = p7->d.signed_and_enveloped->md_algs;
+        /* data_body is NULL if the optional EncryptedContent is missing. */
         data_body = p7->d.signed_and_enveloped->enc_data->enc_data;
         enc_alg = p7->d.signed_and_enveloped->enc_data->algorithm;
         evp_cipher = EVP_get_cipherbyobj(enc_alg->algorithm);
@@ -468,6 +475,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
     case NID_pkcs7_enveloped:
         rsk = p7->d.enveloped->recipientinfo;
         enc_alg = p7->d.enveloped->enc_data->algorithm;
+        /* data_body is NULL if the optional EncryptedContent is missing. */
         data_body = p7->d.enveloped->enc_data->enc_data;
         evp_cipher = EVP_get_cipherbyobj(enc_alg->algorithm);
         if (evp_cipher == NULL) {
@@ -478,6 +486,12 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
         break;
     default:
         PKCS7err(PKCS7_F_PKCS7_DATADECODE, PKCS7_R_UNSUPPORTED_CONTENT_TYPE);
+        goto err;
+    }
+
+    /* Detached content must be supplied via in_bio instead. */
+    if (data_body == NULL && in_bio == NULL) {
+        PKCS7err(PKCS7_F_PKCS7_DATADECODE, PKCS7_R_NO_CONTENT);
         goto err;
     }
 
@@ -623,11 +637,13 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
         etmp = NULL;
     }
 #if 1
-    if (PKCS7_is_detached(p7) || (in_bio != NULL)) {
+    if (in_bio != NULL) {
         bio = in_bio;
     } else {
 # if 0
         bio = BIO_new(BIO_s_mem());
+        if (bio == NULL)
+            goto err;
         /*
          * We need to set this so that when we have read all the data, the
          * encrypt BIO, if present, will read EOF and encode the last few
@@ -642,6 +658,8 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
             bio = BIO_new_mem_buf(data_body->data, data_body->length);
         else {
             bio = BIO_new(BIO_s_mem());
+            if (bio == NULL)
+                goto err;
             BIO_set_mem_eof_return(bio, 0);
         }
         if (bio == NULL)
@@ -709,7 +727,10 @@ static int do_pkcs7_signed_attrib(PKCS7_SIGNER_INFO *si, EVP_MD_CTX *mctx)
     }
 
     /* Add digest */
-    EVP_DigestFinal_ex(mctx, md_data, &md_len);
+    if (!EVP_DigestFinal_ex(mctx, md_data, &md_len)) {
+        PKCS7err(PKCS7_F_DO_PKCS7_SIGNED_ATTRIB, ERR_R_EVP_LIB);
+        return 0;
+    }
     if (!PKCS7_add1_attrib_digest(si, md_data, md_len)) {
         PKCS7err(PKCS7_F_DO_PKCS7_SIGNED_ATTRIB, ERR_R_MALLOC_FAILURE);
         return 0;
@@ -820,7 +841,8 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
             /*
              * We now have the EVP_MD_CTX, lets do the signing.
              */
-            EVP_MD_CTX_copy_ex(&ctx_tmp, mdc);
+            if (!EVP_MD_CTX_copy_ex(&ctx_tmp, mdc))
+                goto err;
 
             sk = si->auth_attr;
 
@@ -852,7 +874,8 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
         if (!PKCS7_find_digest(&mdc, bio,
                                OBJ_obj2nid(p7->d.digest->md->algorithm)))
             goto err;
-        EVP_DigestFinal_ex(mdc, md_data, &md_len);
+        if (!EVP_DigestFinal_ex(mdc, md_data, &md_len))
+            goto err;
         M_ASN1_OCTET_STRING_set(p7->d.digest->digest, md_data, md_len);
     }
 
@@ -1051,7 +1074,8 @@ int PKCS7_signatureVerify(BIO *bio, PKCS7 *p7, PKCS7_SIGNER_INFO *si,
      * mdc is the digest ctx that we want, unless there are attributes, in
      * which case the digest is the signed attributes
      */
-    EVP_MD_CTX_copy_ex(&mdc_tmp, mdc);
+    if (!EVP_MD_CTX_copy_ex(&mdc_tmp, mdc))
+        goto err;
 
     sk = si->auth_attr;
     if ((sk != NULL) && (sk_X509_ATTRIBUTE_num(sk) != 0)) {
@@ -1060,7 +1084,8 @@ int PKCS7_signatureVerify(BIO *bio, PKCS7 *p7, PKCS7_SIGNER_INFO *si,
         int alen;
         ASN1_OCTET_STRING *message_digest;
 
-        EVP_DigestFinal_ex(&mdc_tmp, md_dat, &md_len);
+        if (!EVP_DigestFinal_ex(&mdc_tmp, md_dat, &md_len))
+            goto err;
         message_digest = PKCS7_digest_from_attributes(sk);
         if (!message_digest) {
             PKCS7err(PKCS7_F_PKCS7_SIGNATUREVERIFY,
@@ -1085,7 +1110,8 @@ int PKCS7_signatureVerify(BIO *bio, PKCS7 *p7, PKCS7_SIGNER_INFO *si,
             goto err;
         }
 
-        EVP_VerifyInit_ex(&mdc_tmp, EVP_get_digestbynid(md_type), NULL);
+        if (!EVP_VerifyInit_ex(&mdc_tmp, EVP_get_digestbynid(md_type), NULL))
+            goto err;
 
         alen = ASN1_item_i2d((ASN1_VALUE *)sk, &abuf,
                              ASN1_ITEM_rptr(PKCS7_ATTR_VERIFY));
@@ -1094,7 +1120,8 @@ int PKCS7_signatureVerify(BIO *bio, PKCS7 *p7, PKCS7_SIGNER_INFO *si,
             ret = -1;
             goto err;
         }
-        EVP_VerifyUpdate(&mdc_tmp, abuf, alen);
+        if (!EVP_VerifyUpdate(&mdc_tmp, abuf, alen))
+            goto err;
 
         OPENSSL_free(abuf);
     }
@@ -1133,7 +1160,6 @@ PKCS7_ISSUER_AND_SERIAL *PKCS7_get_issuer_and_serial(PKCS7 *p7, int idx)
     rsk = p7->d.signed_and_enveloped->recipientinfo;
     if (rsk == NULL)
         return NULL;
-    ri = sk_PKCS7_RECIP_INFO_value(rsk, 0);
     if (sk_PKCS7_RECIP_INFO_num(rsk) <= idx)
         return (NULL);
     ri = sk_PKCS7_RECIP_INFO_value(rsk, idx);

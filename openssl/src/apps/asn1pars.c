@@ -313,9 +313,9 @@ int MAIN(int argc, char **argv)
             }
             typ = ASN1_TYPE_get(at);
             if ((typ == V_ASN1_OBJECT)
+                || (typ == V_ASN1_BOOLEAN)
                 || (typ == V_ASN1_NULL)) {
-                BIO_printf(bio_err, "Can't parse %s type\n",
-                           typ == V_ASN1_NULL ? "NULL" : "OBJECT");
+                BIO_printf(bio_err, "Can't parse %s type\n", ASN1_tag2str(typ));
                 ERR_print_errors(bio_err);
                 goto end;
             }
@@ -375,7 +375,7 @@ static int do_generate(BIO *bio, char *genstr, char *genconf, BUF_MEM *buf)
 {
     CONF *cnf = NULL;
     int len;
-    long errline;
+    long errline = 0;
     unsigned char *p;
     ASN1_TYPE *atyp = NULL;
 

@@ -82,6 +82,14 @@ static void *default_malloc_ex(size_t num, const char *file, int line)
 static void *(*malloc_ex_func) (size_t, const char *file, int line)
     = default_malloc_ex;
 
+#ifdef OPENSSL_SYS_VMS
+# if __INITIAL_POINTER_SIZE == 64
+#  define realloc _realloc64
+# elif __INITIAL_POINTER_SIZE == 32
+#  define realloc _realloc32
+# endif
+#endif
+
 static void *(*realloc_func) (void *, size_t) = realloc;
 static void *default_realloc_ex(void *str, size_t num,
                                 const char *file, int line)
@@ -92,7 +100,11 @@ static void *default_realloc_ex(void *str, size_t num,
 static void *(*realloc_ex_func) (void *, size_t, const char *file, int line)
     = default_realloc_ex;
 
-static void (*free_func) (void *) = free;
+#ifdef OPENSSL_SYS_VMS
+   static void (*free_func) (__void_ptr64) = free;
+#else
+   static void (*free_func) (void *) = free;
+#endif
 
 static void *(*malloc_locked_func) (size_t) = malloc;
 static void *default_malloc_locked_ex(size_t num, const char *file, int line)
@@ -103,7 +115,11 @@ static void *default_malloc_locked_ex(size_t num, const char *file, int line)
 static void *(*malloc_locked_ex_func) (size_t, const char *file, int line)
     = default_malloc_locked_ex;
 
-static void (*free_locked_func) (void *) = free;
+#ifdef OPENSSL_SYS_VMS
+   static void (*free_locked_func) (__void_ptr64) = free;
+#else
+   static void (*free_locked_func) (void *) = free;
+#endif
 
 /* may be changed as long as 'allow_customize_debug' is set */
 /* XXX use correct function pointer types */
@@ -134,6 +150,8 @@ static long (*get_debug_options_func) (void) = NULL;
 int CRYPTO_set_mem_functions(void *(*m) (size_t), void *(*r) (void *, size_t),
                              void (*f) (void *))
 {
+    /* Dummy call just to ensure OPENSSL_init() gets linked in */
+    OPENSSL_init();
     if (!allow_customize)
         return 0;
     if ((m == 0) || (r == 0) || (f == 0))
@@ -202,6 +220,7 @@ int CRYPTO_set_mem_debug_functions(void (*m)
 {
     if (!allow_customize_debug)
         return 0;
+    OPENSSL_init();
     malloc_debug_func = m;
     realloc_debug_func = r;
     free_debug_func = f;
@@ -281,9 +300,11 @@ void *CRYPTO_malloc_locked(int num, const char *file, int line)
     if (num <= 0)
         return NULL;
 
-    allow_customize = 0;
+    if (allow_customize)
+        allow_customize = 0;
     if (malloc_debug_func != NULL) {
-        allow_customize_debug = 0;
+        if (allow_customize_debug)
+            allow_customize_debug = 0;
         malloc_debug_func(NULL, num, file, line, 0);
     }
     ret = malloc_locked_ex_func(num, file, line);
@@ -292,18 +313,6 @@ void *CRYPTO_malloc_locked(int num, const char *file, int line)
 #endif
     if (malloc_debug_func != NULL)
         malloc_debug_func(ret, num, file, line, 1);
-
-#ifndef OPENSSL_CPUID_OBJ
-    /*
-     * Create a dependency on the value of 'cleanse_ctr' so our memory
-     * sanitisation function can't be optimised out. NB: We only do this for
-     * >2Kb so the overhead doesn't bother us.
-     */
-    if (ret && (num > 2048)) {
-        extern unsigned char cleanse_ctr;
-        ((unsigned char *)ret)[0] = cleanse_ctr;
-    }
-#endif
 
     return ret;
 }
@@ -327,9 +336,11 @@ void *CRYPTO_malloc(int num, const char *file, int line)
     if (num <= 0)
         return NULL;
 
-    allow_customize = 0;
+    if (allow_customize)
+        allow_customize = 0;
     if (malloc_debug_func != NULL) {
-        allow_customize_debug = 0;
+        if (allow_customize_debug)
+            allow_customize_debug = 0;
         malloc_debug_func(NULL, num, file, line, 0);
     }
     ret = malloc_ex_func(num, file, line);
@@ -339,24 +350,15 @@ void *CRYPTO_malloc(int num, const char *file, int line)
     if (malloc_debug_func != NULL)
         malloc_debug_func(ret, num, file, line, 1);
 
-#ifndef OPENSSL_CPUID_OBJ
-    /*
-     * Create a dependency on the value of 'cleanse_ctr' so our memory
-     * sanitisation function can't be optimised out. NB: We only do this for
-     * >2Kb so the overhead doesn't bother us.
-     */
-    if (ret && (num > 2048)) {
-        extern unsigned char cleanse_ctr;
-        ((unsigned char *)ret)[0] = cleanse_ctr;
-    }
-#endif
-
     return ret;
 }
 
 char *CRYPTO_strdup(const char *str, const char *file, int line)
 {
     char *ret = CRYPTO_malloc(strlen(str) + 1, file, line);
+
+    if (ret == NULL)
+        return NULL;
 
     strcpy(ret, str);
     return ret;

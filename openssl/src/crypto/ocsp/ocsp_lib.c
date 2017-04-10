@@ -129,7 +129,8 @@ OCSP_CERTID *OCSP_cert_id_new(const EVP_MD *dgst,
         goto err;
 
     /* Calculate the issuerKey hash, excluding tag and length */
-    EVP_Digest(issuerKey->data, issuerKey->length, md, &i, dgst, NULL);
+    if (!EVP_Digest(issuerKey->data, issuerKey->length, md, &i, dgst, NULL))
+        goto err;
 
     if (!(ASN1_OCTET_STRING_set(cid->issuerKeyHash, md, i)))
         goto err;
@@ -174,7 +175,7 @@ int OCSP_id_cmp(OCSP_CERTID *a, OCSP_CERTID *b)
  * whether it is SSL.
  */
 
-int OCSP_parse_url(char *url, char **phost, char **pport, char **ppath,
+int OCSP_parse_url(const char *url, char **phost, char **pport, char **ppath,
                    int *pssl)
 {
     char *p, *buf;
@@ -245,12 +246,6 @@ int OCSP_parse_url(char *url, char **phost, char **pport, char **ppath,
     if ((p = strchr(p, ':'))) {
         *p = 0;
         port = p + 1;
-    } else {
-        /* Not found: set default port */
-        if (*pssl)
-            port = "443";
-        else
-            port = "80";
     }
 
     *pport = BUF_strdup(port);
@@ -276,12 +271,18 @@ int OCSP_parse_url(char *url, char **phost, char **pport, char **ppath,
  err:
     if (buf)
         OPENSSL_free(buf);
-    if (*ppath)
+    if (*ppath) {
         OPENSSL_free(*ppath);
-    if (*pport)
+        *ppath = NULL;
+    }
+    if (*pport) {
         OPENSSL_free(*pport);
-    if (*phost)
+        *pport = NULL;
+    }
+    if (*phost) {
         OPENSSL_free(*phost);
+        *phost = NULL;
+    }
     return 0;
 
 }
