@@ -302,7 +302,26 @@ EXPORT UNSIGNED32 STDCALL TaggantGetTaggant(__in PTAGGANTCONTEXT pCtx, __in PFIL
                         {
                             if ((ds_offset + ds_size) == fileend)
                             {
+                                unsigned char tmpbuff[7];
+
                                 fileend -= ds_size;
+
+                                /* account for the zero-padding that the digital certificate might have added prior to being attached */
+
+                                if (file_seek(pCtx, hFile, fileend - sizeof(tmpbuff), SEEK_SET)
+                                 && file_read_buffer(pCtx, hFile, tmpbuff, sizeof(tmpbuff))
+                                   )
+                                {
+                                    int i;
+
+                                    for (i = 4; i <= sizeof(tmpbuff); i++)
+                                    {
+                                        if (!tmpbuff[sizeof(tmpbuff) - i])
+                                        {
+                                            --fileend;
+                                        }
+                                    }
+                                }
                             }
                         }
                         ffhend = fileend;
