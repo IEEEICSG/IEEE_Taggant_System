@@ -314,12 +314,9 @@ EXPORT UNSIGNED32 STDCALL TaggantGetTaggant(__in PTAGGANTCONTEXT pCtx, __in PFIL
                                 {
                                     int i;
 
-                                    for (i = 4; i <= sizeof(tmpbuff); i++)
+                                    for (i = sizeof(tmpbuff) - 1; i >= 0 && !tmpbuff[i]; i--)
                                     {
-                                        if (!tmpbuff[sizeof(tmpbuff) - i])
-                                        {
-                                            --fileend;
-                                        }
+                                        --fileend;
                                     }
                                 }
                             }
