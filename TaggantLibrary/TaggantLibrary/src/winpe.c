@@ -269,7 +269,7 @@ UNSIGNED32 winpe_raw_section_offset(PE_ALL_HEADERS* peh, TAG_IMAGE_SECTION_HEADE
     return sec->PointerToRawData;
 }
 
-int winpe_va_to_rwa(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, PE_ALL_HEADERS* peh, UNSIGNED32 va, UNSIGNED64 *offset)
+int winpe_va_to_rva(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, PE_ALL_HEADERS* peh, UNSIGNED32 va, UNSIGNED64 *offset)
 {
     long filepos;
     int i;
@@ -285,7 +285,7 @@ int winpe_va_to_rwa(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, PE_ALL_HEADERS* peh, U
         /* shift file pointer to the sections array */
         if (file_seek(pCtx, fp, filepos, SEEK_SET))
         {
-            /* reading all sections and find rwa address */
+            /* reading all sections and find rva address */
             for (i = 0; i < peh->fh.NumberOfSections; i++)
             {
                 /* read section from the file */
@@ -294,7 +294,7 @@ int winpe_va_to_rwa(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, PE_ALL_HEADERS* peh, U
                     if (va < fs.VirtualAddress)
                     {
                         /* If va is less than virtual address of the first section, then
-                           we assume the va is located in file header, and so va = rwa */
+                           we assume the va is located in file header, and so va = rva */
                         if (i == 0)
                         {
                             *offset = (UNSIGNED64)va;
@@ -337,13 +337,13 @@ int winpe_entry_point_physical_offset(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, PE_A
     {
         if (peh->oh.pe64.AddressOfEntryPoint != 0)
         {
-            return winpe_va_to_rwa(pCtx, fp, peh, peh->oh.pe64.AddressOfEntryPoint, ep_offset);
+            return winpe_va_to_rva(pCtx, fp, peh, peh->oh.pe64.AddressOfEntryPoint, ep_offset);
         }
     } else
     {
         if (peh->oh.pe32.AddressOfEntryPoint != 0)
         {
-            return winpe_va_to_rwa(pCtx, fp, peh, peh->oh.pe32.AddressOfEntryPoint, ep_offset);
+            return winpe_va_to_rva(pCtx, fp, peh, peh->oh.pe32.AddressOfEntryPoint, ep_offset);
         }
     }
     return 0;

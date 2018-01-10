@@ -91,7 +91,7 @@ UNSIGNED64 winpe2_object_end(PTAGGANTCONTEXT pCtx, PFILEOBJECT fp, PE_ALL_HEADER
         /* shift file pointer to the sections array */
         if (file_seek(pCtx, fp, filepos, SEEK_SET))
         {
-            /* reading all sections and find rwa address */
+            /* reading all sections and find rva address */
             for (i = 0; i < peh->fh.NumberOfSections; i++)
             {
                 /* read section from the file */
