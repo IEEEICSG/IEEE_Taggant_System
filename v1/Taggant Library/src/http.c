@@ -222,8 +222,9 @@ int http_read(const char *hostName, const void *requestString, int requestLength
 			break;
 		}
 		case 301:
+		case 302:
 		{
-			/* Permanent redirection, extract new location */
+			/* Redirection, extract new location */
 			if (buffer)
 			{
 				r_start = strstr(buffer, HTTP_Header_Location);
